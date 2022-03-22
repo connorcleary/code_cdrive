@@ -33,9 +33,9 @@ def build_model(Lx, Ly, Lz, modelname, hk, vka, direction, head):
         top=top,
         botm=botm,
         itmuni=1,
-        perlen= 0.001,
-        tsmult = 1.1,
-        nstp=100,
+        perlen= 1,
+        tsmult = 1,
+        nstp=1,
     )
 
     ibound = np.ones((nlay, nrow, ncol), dtype=np.int32)
@@ -45,7 +45,7 @@ def build_model(Lx, Ly, Lz, modelname, hk, vka, direction, head):
         ibound[:, :, 0] = -1
         ibound[:, :, -1] = -1
         strt[:, :, 0] = head
-        strt[:, :, -1] = 0.0
+        strt[:, :, -1] = 0
     else:
         ibound[0, :, :] = -1
         ibound[-1, :, :] = -1
@@ -63,7 +63,7 @@ def build_model(Lx, Ly, Lz, modelname, hk, vka, direction, head):
         hk=hk,
         vka=vka, 
         ipakcb=53,
-        laytyp=1
+        laytyp=0
         )
 
     spd = {(0, 0): ["print head", "print budget", "save head", "save budget"]}
@@ -73,7 +73,7 @@ def build_model(Lx, Ly, Lz, modelname, hk, vka, direction, head):
         compact=True
     )
 
-    pcg = flopy.modflow.ModflowPcg(gwf)
+    pcg = flopy.modflow.ModflowPcg(gwf, mxiter=500)
 
     return gwf
 

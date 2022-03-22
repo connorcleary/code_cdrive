@@ -46,17 +46,18 @@ def build_coastal_aquifer_model(modelname, Lz, Lx, Ly, nlay, nrow, ncol, head, p
     ibound[:, :, -1] = -1
     ibound[0, :, int(ncol/4):ncol] = -1
 
-    strt = np.zeros((nlay, ncol))
+    strt = np.zeros((nlay, nrow, ncol))
 
     bas = flopy.modflow.ModflowBas(swt, ibound, strt=strt)
 
     lpf = flopy.modflow.ModflowLpf(swt, hk=0, vka=0, ipakcb=ipakcb, laytyp=1)
 
-    pcg = flopy.modflow.ModflowPcg(swt, hclose=1.0e-8)
+    pcg = flopy.modflow.ModflowPcg(swt, hclose=1.0e-5, npcond=0, mxiter=500)
 
     oc = flopy.modflow.ModflowOc(
         swt,
-        stress_period_data={(0, nstp-1): ["save head", "save budget"]},
+        stress_period_data={(0, 0): ["save head", "save budget"], 
+                            (0, nstp-1): ["save head", "save budget"]},
         compact=True
     )
 
@@ -113,7 +114,7 @@ def build_coastal_aquifer_model(modelname, Lz, Lx, Ly, nlay, nrow, ncol, head, p
         swt,
         nprs=-5,
         prsity=0.35, # can change this
-        sconc=sconc,#sconc, # can change this: to each area having different starti
+        sconc= sconc, # can change this: to each area having different starti
         ifmtcn=0,
         chkmas=False,
         nprobs=10,
@@ -123,7 +124,7 @@ def build_coastal_aquifer_model(modelname, Lz, Lx, Ly, nlay, nrow, ncol, head, p
 
     adv = flopy.mt3d.Mt3dAdv(swt, mixelm=0)
     dsp = flopy.mt3d.Mt3dDsp(swt, al=0.4, trpt=0.1, trpv=0.01, dmcoef=1e-9)
-    gcg = flopy.mt3d.Mt3dGcg(swt, iter1=500, mxiter=1, isolve=1, cclose=1e-7)
+    gcg = flopy.mt3d.Mt3dGcg(swt, iter1=500, mxiter=1, isolve=2, cclose=1e-5)
     ssm = flopy.mt3d.Mt3dSsm(swt, stress_period_data=ssm_data)
 
     vdf = flopy.seawat.SeawatVdf(

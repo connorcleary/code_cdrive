@@ -73,6 +73,7 @@ def main():
     qinflow = calc_qinflow(qx, qy)
     # qinflow = 0.008917525
 
+
     swt = coastal.change_to_homogenous(swt, nlay, nrow, ncol, qinflow=qinflow)
     swt.dis.firstdt = 0.5e7
     swt.lpf.hk = Kh_eff
