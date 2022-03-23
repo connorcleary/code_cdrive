@@ -26,25 +26,37 @@ def find_toe_penetration(conc):
 def find_sgd(names):
     return sgd_fresh, sgd_saline
 
-def plot_conc(ax, swt, results_dict):
+def plot_conc(ax, swt, results_dict, row=0):
 
     ax.set_aspect(10)
-    pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": 0})
+    pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
     arr = pmv.plot_array(results_dict['concentration'])
-    pmv.plot_vector(results_dict['qx'], results_dict['qz'], -results_dict['qz'], color="white", kstep=3, hstep=3)
+    pmv.plot_vector(results_dict['qx'], results_dict['qy'], -results_dict['qz'], color="white", kstep=3, hstep=3)
     plt.colorbar(arr, shrink=0.5, ax=ax)
+
     ax.set_title("Simulated Concentrations")
 
+    return ax
 
-def plot_head(ax, swt, results_dict):
+
+def plot_head(ax, swt, results_dict, row=0):
 
     ax.set_aspect(10)
-    pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": 0})
-    arr = pmv.plot_array(results_dict['head'])
-    contours = pmv.contour_array(results_dict['head'], colors="white")
+    pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
+
+    if type(results_dict) is dict:
+        arr = pmv.plot_array(results_dict['head'])
+        contours = pmv.contour_array(results_dict['head'], colors="white")
+    else: 
+        contours = pmv.contour_array(results_dict, colors="white")
+        arr = pmv.plot_array(results_dict)
+        
+
     ax.clabel(contours, fmt="%2.2f")
     plt.colorbar(arr, shrink=0.5, ax=ax)
     ax.set_title("Simulated Heads")
+
+    return ax
 
 
 def extract_results(swt):
@@ -86,4 +98,26 @@ def save_results(swt, realization, concentration, qx, qy, qz, head):
     np.savetxt(os.path.join(ws, f"head_{realization}"), head[:,0,:])
     np.savetxt(os.path.join(ws, f"concentration_{realization}"), concentration[:,0,:])
 
+def save_results_3D(swt, realization, concentration, qx, qy, qz, head):
+    
+    ws = os.path.join(f'.\\results\\{swt._BaseModel__name}')
+    if not os.path.exists(ws):
+        os.mkdir(ws)
 
+    with open(os.path.join(ws, f"qx_{realization}.npy"), 'wb') as f: np.save(f, np.array(qx))
+    with open(os.path.join(ws, f"qy_{realization}.npy"), 'wb') as f: np.save(f, np.array(qy))
+    with open(os.path.join(ws, f"qz_{realization}.npy"), 'wb') as f: np.save(f, np.array(qz))
+    with open(os.path.join(ws, f"head_{realization}.npy"), 'wb') as f: np.save(f, np.array(head))
+    with open(os.path.join(ws, f"concentration_{realization}.npy"), 'wb') as f: np.save(f, np.array(concentration))
+
+def load_results_3D(modelname, realization):
+
+    ws = os.path.join(f'.\\results\\{modelname}')
+
+    with open(os.path.join(ws, f"qx_{realization}.npy"), 'rb') as f: qx = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qy_{realization}.npy"), 'rb') as f: qy = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qz_{realization}.npy"), 'rb') as f: qz = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"head_{realization}.npy"), 'rb') as f: head = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"concentration_{realization}.npy"), 'rb') as f: concentration = np.load(f, allow_pickle=True)
+
+    return qx, qy, qz, head, concentration
