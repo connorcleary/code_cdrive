@@ -42,47 +42,47 @@ def main():
 
     name = "pirot2D_" + str(mult)
 
-    # swt = coastal.build_coastal_aquifer_model(name, Lz, Lx, Ly, nlay, nrow, ncol, head, perlen, dt/2, nstp)
-    # # change hk
-    # Kh, Kv = load_field()
-    # # swt.lpf.hk = np.transpose(Kh, (2, 0, 1))[:,0,:]
-    # # swt.lpf.vka = np.transpose(Kv, (2, 0, 1))[:,0,:]
+    swt = coastal.build_coastal_aquifer_model(name, Lz, Lx, Ly, nlay, nrow, ncol, head, perlen, dt, nstp)
+    # change hk
+    Kh, Kv = load_field()
+    # swt.lpf.hk = np.transpose(Kh, (2, 0, 1))[:,0,:]
+    # swt.lpf.vka = np.transpose(Kv, (2, 0, 1))[:,0,:]
 
-    # Kh_big = np.zeros((nlay, ncol))
-    # Kv_big = np.zeros((nlay, ncol))
-    # for i in range(mult):
-    #     for j in range(mult):
-    #         if not flipped:
-    #             Kh_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kh, (2, 0, 1))[:,(10*i+j)%40,:]
-    #             Kv_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kv, (2, 0, 1))[:,(10*i+j)%40,:]
-    #         else:
-    #             Kh_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kh, (2, 0, 1))[:,(10*i+j)%40,::(-1)**j]
-    #             Kv_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kv, (2, 0, 1))[:,(10*i+j)%40,::(-1)**j]
+    Kh_big = np.zeros((nlay, ncol))
+    Kv_big = np.zeros((nlay, ncol))
+    for i in range(mult):
+        for j in range(mult):
+            if not flipped:
+                Kh_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kh, (2, 0, 1))[:,(10*i+j)%40,:]
+                Kv_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kv, (2, 0, 1))[:,(10*i+j)%40,:]
+            else:
+                Kh_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kh, (2, 0, 1))[:,(10*i+j)%40,::(-1)**j]
+                Kv_big[i*50:i*50+50,j*80:j*80+80] = np.transpose(Kv, (2, 0, 1))[:,(10*i+j)%40,::(-1)**j]
 
-    # swt.lpf.hk = Kh_big
-    # swt.lpf.vka = Kv_big
+    swt.lpf.hk = Kh_big
+    swt.lpf.vka = Kv_big
 
-    # # swt.write_input()
+    # swt.write_input()
 
-    # run_model(swt)
-    # concentration, qx, qy, qz, head_array = proc.extract_results(swt)# extract and save results
-    # proc.save_results(swt, "heterogenous", concentration, qx, qy, qz, head_array)
-    # # calculate hk and vka and qinflow
+    run_model(swt)
+    concentration, qx, qy, qz, head_array = proc.extract_results(swt)# extract and save results
+    proc.save_results(swt, "heterogenous", concentration, qx, qy, qz, head_array)
+    # calculate hk and vka and qinflow
     
-    # Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, swt.lpf.hk, swt.lpf.vka, Lx, Ly*10, Lz, head, 0)
-    # qinflow = calc_qinflow(qx, qy)
-    # # qinflow = 0.008917525
+    Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, swt.lpf.hk, swt.lpf.vka, Lx, Ly, Lz, head, 0)
+    qinflow = calc_qinflow(qx, qy)
+    # qinflow = 0.008917525
 
 
-    # swt = coastal.change_to_homogenous(swt, nlay, nrow, ncol, qinflow=qinflow)
-    # swt.dis.firstdt = 0.5e7
-    # swt.lpf.hk = Kh_eff
-    # swt.lpf.vka = Kv_eff
-    # run_model(swt)
-    # concentration, qx, qy, qz, head_array = proc.extract_results(swt)# extract and save results
-    # proc.save_results(swt, "homogenous", concentration, qx, qy, qz, head_array)
-    # # extract and save results
-    # print(qinflow)
+    swt = coastal.change_to_homogenous(swt, nlay, nrow, ncol, qinflow=qinflow)
+    swt.dis.firstdt = 0.5e7
+    swt.lpf.hk = Kh_eff
+    swt.lpf.vka = Kv_eff
+    run_model(swt)
+    concentration, qx, qy, qz, head_array = proc.extract_results(swt)# extract and save results
+    proc.save_results(swt, "homogenous", concentration, qx, qy, qz, head_array)
+    # extract and save results
+    print(qinflow)
     results.results(name)
 
 if __name__=="__main__":

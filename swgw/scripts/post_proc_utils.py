@@ -26,12 +26,12 @@ def find_toe_penetration(conc):
 def find_sgd(names):
     return sgd_fresh, sgd_saline
 
-def plot_conc(ax, swt, results_dict, row=0):
+def plot_conc(ax, swt, results_dict, row=0, **kwargs):
 
     ax.set_aspect(10)
     pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
-    arr = pmv.plot_array(results_dict['concentration'])
-    pmv.plot_vector(results_dict['qx'], results_dict['qy'], -results_dict['qz'], color="white", kstep=3, hstep=3)
+    arr = pmv.plot_array(results_dict['concentration'], **kwargs)
+    pmv.plot_vector(results_dict['qx'], -results_dict['qz'], -results_dict['qz'], color="white", kstep=3, hstep=3, normalize=True)
     plt.colorbar(arr, shrink=0.5, ax=ax)
 
     ax.set_title("Simulated Concentrations")
@@ -39,17 +39,17 @@ def plot_conc(ax, swt, results_dict, row=0):
     return ax
 
 
-def plot_head(ax, swt, results_dict, row=0):
+def plot_head(ax, swt, results_dict, row=0, **kwargs):
 
     ax.set_aspect(10)
     pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
 
     if type(results_dict) is dict:
-        arr = pmv.plot_array(results_dict['head'])
+        arr = pmv.plot_array(results_dict['head'], **kwargs)
         contours = pmv.contour_array(results_dict['head'], colors="white")
     else: 
         contours = pmv.contour_array(results_dict, colors="white")
-        arr = pmv.plot_array(results_dict)
+        arr = pmv.plot_array(results_dict, **kwargs)
         
 
     ax.clabel(contours, fmt="%2.2f")
@@ -59,7 +59,7 @@ def plot_head(ax, swt, results_dict, row=0):
     return ax
 
 
-def extract_results(swt):
+def extract_results(swt, pump=False, rec=False):
 
     shape = swt.lpf.hk.shape
     if len(shape) == 2:
@@ -71,20 +71,53 @@ def extract_results(swt):
     ws = swt._model_ws
     ucnobj = bf.UcnFile(os.path.join(ws, "MT3D001.UCN"), model=swt)
     times = ucnobj.get_times()
-    concentration = ucnobj.get_data(totim=times[-1])
-
     cbbobj = bf.CellBudgetFile(os.path.join(ws, f'{swt._BaseModel__name}.cbc'))
-    qx = cbbobj.get_data(text="flow right face", totim=times[-1])[0]
-    try:
-        qy = cbbobj.get_data(text="flow front face", totim=times[-1])[0]
-    except:
-        qy = np.zeros((nlay, nrow, ncol), dtype=float)
-    qz = cbbobj.get_data(text="flow lower face", totim=times[-1])[0]
-
     headobj = bf.HeadFile(os.path.join(ws, f'{swt._BaseModel__name}.hds'))
-    head = headobj.get_data(totim=times[-1])
+    
+    if not pump:
+        concentration = ucnobj.get_data(totim=times[-1])
+        qx = cbbobj.get_data(text="flow right face", totim=times[-1])[0]
+        try:
+            qy = cbbobj.get_data(text="flow front face", totim=times[-1])[0]
+        except:
+            qy = np.zeros((nlay, nrow, ncol), dtype=float)
+        qz = cbbobj.get_data(text="flow lower face", totim=times[-1])[0]
+        head = headobj.get_data(totim=times[-1])
+
+    else:
+        concentration = {"steady": ucnobj.get_data(kstpkper=(14,0)),
+            "pumping": ucnobj.get_data(kstpkper=(14,1))
+        }
+        head = {"steady": headobj.get_data(kstpkper=(14,0)),
+            "pumping": headobj.get_data(kstpkper=(14,1))
+        }
+        qx = {"steady": cbbobj.get_data(text="flow right face", kstpkper=(14,0))[0],
+            "pumping": cbbobj.get_data(text="flow right face", kstpkper=(14,1))[0]
+        }
+        qy = {}
+        try:
+            qy["steady"] = cbbobj.get_data(text="flow front face", kstpkper=(14,0))[0]
+            qy["pumping"] = cbbobj.get_data(text="flow front face", kstpkper=(14,1))[0]
+        except:
+            qy["steady"] = np.zeros((nlay, nrow, ncol), dtype=float)
+            qy["pumping"] = np.zeros((nlay, nrow, ncol), dtype=float) 
+        qz = {"steady": cbbobj.get_data(text="flow lower face", kstpkper=(14,0))[0],
+            "pumping": cbbobj.get_data(text="flow lower face", kstpkper=(14,1))[0]
+        }
+
+        if rec:
+            concentration["recovery"] = ucnobj.get_data(kstpkper=(14,2))
+            head["recovery"] = headobj.get_data(kstpkper=(14,2))
+            qx["recovery"] = cbbobj.get_data(text="flow right face", kstpkper=(14,2))[0]
+            qz["recovery"] = cbbobj.get_data(text="flow lower face", kstpkper=(14,2))[0]
+            try:
+                qy["recovery"] = cbbobj.get_data(text="flow front face", kstpkper=(14,2))[0]
+            except:
+                qy["recovery"] = np.zeros((nlay, nrow, ncol), dtype=float) 
+
 
     return concentration, qx, qy, qz, head
+
 
 def save_results(swt, realization, concentration, qx, qy, qz, head):
 
