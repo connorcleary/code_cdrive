@@ -4,6 +4,7 @@ import numpy as np
 import flopy.utils.binaryfile as bf
 import matplotlib.pyplot as plt
 import os
+import post_proc_array as proc_functions
 
 def find_mixing_zone(conc):
     
@@ -31,7 +32,7 @@ def plot_conc(ax, swt, results_dict, row=0, **kwargs):
     ax.set_aspect(10)
     pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
     arr = pmv.plot_array(results_dict['concentration'], **kwargs)
-    pmv.plot_vector(results_dict['qx'], -results_dict['qz'], -results_dict['qz'], color="white", kstep=3, hstep=3, normalize=True)
+    pmv.plot_vector(results_dict['qx'], -results_dict['qz'], -results_dict['qz'], kstep=3, hstep=3, normalize=False, color="white")
     plt.colorbar(arr, shrink=0.5, ax=ax)
 
     ax.set_title("Simulated Concentrations")
@@ -58,8 +59,7 @@ def plot_head(ax, swt, results_dict, row=0, **kwargs):
 
     return ax
 
-
-def extract_results(swt, pump=False, rec=False):
+def extract_results(swt, nstp, pump=False, rec=False):
 
     shape = swt.lpf.hk.shape
     if len(shape) == 2:
@@ -85,33 +85,27 @@ def extract_results(swt, pump=False, rec=False):
         head = headobj.get_data(totim=times[-1])
 
     else:
-        concentration = {"steady": ucnobj.get_data(kstpkper=(14,0)),
-            "pumping": ucnobj.get_data(kstpkper=(14,1))
+        concentration = {"pumping": ucnobj.get_data(kstpkper=(nstp-1,0))
         }
-        head = {"steady": headobj.get_data(kstpkper=(14,0)),
-            "pumping": headobj.get_data(kstpkper=(14,1))
+        head = {"pumping": headobj.get_data(kstpkper=(nstp-1,0))
         }
-        qx = {"steady": cbbobj.get_data(text="flow right face", kstpkper=(14,0))[0],
-            "pumping": cbbobj.get_data(text="flow right face", kstpkper=(14,1))[0]
+        qx = {"pumping": cbbobj.get_data(text="flow right face", kstpkper=(nstp-1,0))[0]
         }
         qy = {}
         try:
-            qy["steady"] = cbbobj.get_data(text="flow front face", kstpkper=(14,0))[0]
-            qy["pumping"] = cbbobj.get_data(text="flow front face", kstpkper=(14,1))[0]
+            qy["pumping"] = cbbobj.get_data(text="flow front face", kstpkper=(nstp-1,0))[0]
         except:
-            qy["steady"] = np.zeros((nlay, nrow, ncol), dtype=float)
             qy["pumping"] = np.zeros((nlay, nrow, ncol), dtype=float) 
-        qz = {"steady": cbbobj.get_data(text="flow lower face", kstpkper=(14,0))[0],
-            "pumping": cbbobj.get_data(text="flow lower face", kstpkper=(14,1))[0]
+        qz = {"pumping": cbbobj.get_data(text="flow lower face", kstpkper=(nstp-1,0))[0]
         }
 
         if rec:
-            concentration["recovery"] = ucnobj.get_data(kstpkper=(14,2))
-            head["recovery"] = headobj.get_data(kstpkper=(14,2))
-            qx["recovery"] = cbbobj.get_data(text="flow right face", kstpkper=(14,2))[0]
-            qz["recovery"] = cbbobj.get_data(text="flow lower face", kstpkper=(14,2))[0]
+            concentration["recovery"] = ucnobj.get_data(kstpkper=(nstp-1,1))
+            head["recovery"] = headobj.get_data(kstpkper=(nstp-1,1))
+            qx["recovery"] = cbbobj.get_data(text="flow right face", kstpkper=(nstp-1,1))[0]
+            qz["recovery"] = cbbobj.get_data(text="flow lower face", kstpkper=(nstp-1,1))[0]
             try:
-                qy["recovery"] = cbbobj.get_data(text="flow front face", kstpkper=(14,2))[0]
+                qy["recovery"] = cbbobj.get_data(text="flow front face", kstpkper=(nstp-1,1))[0]
             except:
                 qy["recovery"] = np.zeros((nlay, nrow, ncol), dtype=float) 
 
@@ -131,26 +125,85 @@ def save_results(swt, realization, concentration, qx, qy, qz, head):
     np.savetxt(os.path.join(ws, f"head_{realization}"), head[:,0,:])
     np.savetxt(os.path.join(ws, f"concentration_{realization}"), concentration[:,0,:])
 
-def save_results_3D(swt, realization, concentration, qx, qy, qz, head):
+def save_results_3D(swt, realization, concentration, qx, qy, qz, head, stress_period=None, name=None):
     
-    ws = os.path.join(f'.\\results\\{swt._BaseModel__name}')
+    ws = os.path.join(f'.\\results\\{name}')
     if not os.path.exists(ws):
         os.mkdir(ws)
 
-    with open(os.path.join(ws, f"qx_{realization}.npy"), 'wb') as f: np.save(f, np.array(qx))
-    with open(os.path.join(ws, f"qy_{realization}.npy"), 'wb') as f: np.save(f, np.array(qy))
-    with open(os.path.join(ws, f"qz_{realization}.npy"), 'wb') as f: np.save(f, np.array(qz))
-    with open(os.path.join(ws, f"head_{realization}.npy"), 'wb') as f: np.save(f, np.array(head))
-    with open(os.path.join(ws, f"concentration_{realization}.npy"), 'wb') as f: np.save(f, np.array(concentration))
+    with open(os.path.join(ws, f"qx_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(qx))
+    with open(os.path.join(ws, f"qy_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(qy))
+    with open(os.path.join(ws, f"qz_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(qz))
+    with open(os.path.join(ws, f"head_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(head))
+    with open(os.path.join(ws, f"concentration_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(concentration))
 
-def load_results_3D(modelname, realization):
+def save_equivalent_parameters(qx, qy, qz, Kh, Kv, name, realization):
+    ws = os.path.join(f'.\\results\\{name}')
+    if not os.path.exists(ws):
+        os.mkdir(ws)
+
+    with open(os.path.join(ws, f"parameters_{realization}.npy"), 'wb') as f: np.save(f, np.array([qx, qy, qz, Kh, Kv]))
+
+def load_equivalent_parameters(name, realization):
+    
+    ws = os.path.join(f'.\\results\\{name}')
+    with open(os.path.join(ws, f"parameters_{realization}.npy"), 'rb') as f: pars = np.load(f, allow_pickle=True)
+
+    return pars
+
+def load_results_3D(modelname, realization, stress_period=None):
 
     ws = os.path.join(f'.\\results\\{modelname}')
 
-    with open(os.path.join(ws, f"qx_{realization}.npy"), 'rb') as f: qx = np.load(f, allow_pickle=True)
-    with open(os.path.join(ws, f"qy_{realization}.npy"), 'rb') as f: qy = np.load(f, allow_pickle=True)
-    with open(os.path.join(ws, f"qz_{realization}.npy"), 'rb') as f: qz = np.load(f, allow_pickle=True)
-    with open(os.path.join(ws, f"head_{realization}.npy"), 'rb') as f: head = np.load(f, allow_pickle=True)
-    with open(os.path.join(ws, f"concentration_{realization}.npy"), 'rb') as f: concentration = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qx_{realization}{stress_period}.npy"), 'rb') as f: qx = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qy_{realization}{stress_period}.npy"), 'rb') as f: qy = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qz_{realization}{stress_period}.npy"), 'rb') as f: qz = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"head_{realization}{stress_period}.npy"), 'rb') as f: head = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"concentration_{realization}{stress_period}.npy"), 'rb') as f: concentration = np.load(f, allow_pickle=True)
 
     return qx, qy, qz, head, concentration
+
+def get_time_evolution(swt, nstp):
+
+    ws = swt._model_ws
+    ucnobj = bf.UcnFile(os.path.join(ws, "MT3D001.UCN"), model=swt)
+    times = ucnobj.get_times()
+    cbbobj = bf.CellBudgetFile(os.path.join(ws, f'{swt._BaseModel__name}.cbc'))
+    headobj = bf.HeadFile(os.path.join(ws, f'{swt._BaseModel__name}.hds'))
+    delV = -1*swt.dis.delc[0]*swt.dis.delr[0]*swt.dis.botm[0][0]
+    
+    concentration_data = ucnobj.get_alldata()[nstp:]
+    # budget_data = cbbobj.get_alldata()[15:]
+    # head_data = headobj.get_alldata()[15:]
+    (qlay, qrow, qcol, _) = swt.wel.stress_period_data['1'][-1]
+
+    mixing_zone_evolution =  list(map(proc_functions.mixing_zone_volume, concentration_data, 2*nstp*[delV]))
+    fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], 2000*[15]))
+    well_salinity = concentration_data[:,qlay,qrow,qcol]
+    
+    return mixing_zone_evolution, fresh_volume_evolution, well_salinity
+
+def compare_time_evolutions(times, arrays, realizations, metrics, colors, modelname):
+    '''
+        Compare time evolutions for a number of metrics between a number of
+        realizations
+    '''
+    f, axs = plt.subplots(len(metrics), sharex=True, figsize=(15, 12))
+    for mdx, (array, metric) in enumerate(zip(arrays, metrics)):
+        for series, realization in zip(array, realizations):
+            if realization == "homogenous":
+                linestyle = "--"
+            else:
+                linestyle = "-"
+            axs[mdx].plot(times, series, label=realization, linestyle=linestyle, color=colors[mdx])
+
+        axs[mdx].set_title(f"{metric} over time") 
+        axs[mdx].set_ylabel(metric)
+        axs[mdx].set_xlabel("Time (days)")
+        axs[mdx].axvline(x=times[-1]/2, color="grey", linestyle=":")
+        axs[mdx].legend()
+
+    results_location = f'.\\results\\{modelname}'
+    plt.savefig(f"{results_location}\\time_evolution_{modelname}.jpg", dpi=1200)
+    plt.show()
+

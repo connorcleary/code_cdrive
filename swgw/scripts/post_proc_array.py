@@ -47,7 +47,34 @@ def plot_subset(matrix, hk, name):
     plt.show()
         
 
-def plot_array():
+def mixing_zone_volume(concentration, delV):
+    '''
+    Calculate the volume of the mixing zone
+    '''
+    mix = 0
+    for i in range(concentration.shape[0]):
+        for j in range(concentration.shape[1]):
+            for k in range(concentration.shape[2]):
+                if 3.5 <= concentration[i][j][k] <= 31.5:
+                    mix += 1
+    return mix*delV
+
+def fresh_water_volume(concentration, delV, colq):
+    '''
+    Calculate the volume of fresh water seaward of the pumping locationY
+    '''
+    fresh = 0
+    for i in range(concentration.shape[0]):
+        for j in range(concentration.shape[1]):
+            for k in range(colq, concentration.shape[2]):
+                if 3.5 > concentration[i][j][k]:
+                    fresh += 1
+    return fresh*delV
+
+def well_salinity(concentration, lay, row, col):
+    '''
+    Find the concentration at the well over time
+    '''
     pass
 
 

@@ -25,6 +25,7 @@ def results(modelname):
     axs[0][1] = proc.plot_conc(axs[0][1], swt, homogenous)
     axs[1][1] = proc.plot_head(axs[1][1], swt, homogenous)
     plt.savefig(f"{results_location}\\comparison_{modelname}.jpg", dpi=1200)
+    plt.show()
 
 def results_3D(modelname):
     swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
@@ -62,7 +63,7 @@ def results_pumping_recovery(modelname, lay, row, col):
     swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
     results_location = f'.\\results\\{modelname}'
     qx, qy, qz, head, concentration = proc.load_results_3D(modelname, "heterogenous")
-    f, axs = plt.subplots(3, 1, figsize = (9, 12))
+    f, axs = plt.subplots(3, 1, figsize = (18, 12))
     axs[0] = proc.plot_conc(axs[0], swt, {'qx':qx.item().get('steady')[:, :, :], 'qy':qy.item().get('steady')[:, :, :], 'qz':qz.item().get('steady')[:, :, :], 'concentration':concentration.item().get('steady')[:, :, :]}, row, vmax=35, vmin=0)
     axs[0].set_title("Steady state concentration")
     axs[1] = proc.plot_conc(axs[1], swt, {'qx':qx.item().get('pumping')[:, :, :], 'qy':qy.item().get('pumping')[:, :, :], 'qz':qz.item().get('pumping')[:, :, :], 'concentration':concentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
@@ -74,6 +75,90 @@ def results_pumping_recovery(modelname, lay, row, col):
     plt.savefig(f"{results_location}\\pumping_and_recovery{modelname}.jpg", dpi=1200)
     plt.show()
 
+def results_pumping_recovery_comparison(modelname, lay, row, col):
+    
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    results_location = f'.\\results\\{modelname}'
+    qx, qy, qz, head, concentration = proc.load_results_3D(modelname, "heterogenous")
+    eqqx, eqqy, eqqz, eqhead, eqconcentration = proc.load_results_3D(modelname, "homogenous")
+    f, axs = plt.subplots(3, 2, figsize = (18, 12))
+    axs[0][0] = proc.plot_conc(axs[0][0], swt, {'qx':qx.item().get('steady')[:, :, :], 'qy':qy.item().get('steady')[:, :, :], 'qz':qz.item().get('steady')[:, :, :], 'concentration':concentration.item().get('steady')[:, :, :]}, row, vmax=35, vmin=0)
+    axs[0][0].set_title("Steady state concentration")
+    axs[1][0] = proc.plot_conc(axs[1][0], swt, {'qx':qx.item().get('pumping')[:, :, :], 'qy':qy.item().get('pumping')[:, :, :], 'qz':qz.item().get('pumping')[:, :, :], 'concentration':concentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[1][0].set_title("Concentration after pumping")
+    axs[2][0] = proc.plot_conc(axs[2][0], swt, {'qx':qx.item().get('recovery')[:, :, :], 'qy':qy.item().get('recovery')[:, :, :], 'qz':qz.item().get('recovery')[:, :, :], 'concentration':concentration.item().get('recovery')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[2][0].set_title("Concentration after recovery")
+    axs[1][0].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[2][0].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[0][1] = proc.plot_conc(axs[0][1], swt, {'qx':eqqx.item().get('steady')[:, :, :], 'qy':eqqy.item().get('steady')[:, :, :], 'qz':eqqz.item().get('steady')[:, :, :], 'concentration':eqconcentration.item().get('steady')[:, :, :]}, row, vmax=35, vmin=0)
+    axs[0][1].set_title("Steady state concentration")
+    axs[1][1] = proc.plot_conc(axs[1][1], swt, {'qx':eqqx.item().get('pumping')[:, :, :], 'qy':eqqy.item().get('pumping')[:, :, :], 'qz':eqqz.item().get('pumping')[:, :, :], 'concentration':eqconcentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[1][1].set_title("Concentration after pumping")
+    axs[2][1] = proc.plot_conc(axs[2][1], swt, {'qx':eqqx.item().get('recovery')[:, :, :], 'qy':eqqy.item().get('recovery')[:, :, :], 'qz':eqqz.item().get('recovery')[:, :, :], 'concentration':eqconcentration.item().get('recovery')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[2][1].set_title("Concentration after recovery")
+    axs[1][1].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[2][1].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    plt.savefig(f"{results_location}\\pumping_and_recovery_comparison_{modelname}.jpg", dpi=1200)
+    plt.show()
+
+def results_pumping_recovery_comparison_with_heterogeneity(modelname, lay, row, col, hk, eqhk):
+    
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    results_location = f'.\\results\\{modelname}'
+    qx, qy, qz, head, concentration = proc.load_results_3D(modelname, "heterogenous")
+    eqqx, eqqy, eqqz, eqhead, eqconcentration = proc.load_results_3D(modelname, "homogenous")
+
+    f, axs = plt.subplots(4, 2, figsize = (18, 18))
+
+    axs[0][0] = proc.plot_conc(axs[0][0], swt, {'qx':qx.item().get('steady')[:, :, :], 'qy':qy.item().get('steady')[:, :, :], 'qz':qz.item().get('steady')[:, :, :], 'concentration':concentration.item().get('steady')[:, :, :]}, row, vmax=35, vmin=0)
+    axs[0][0].set_title("Steady state concentration")
+    axs[1][0] = proc.plot_conc(axs[1][0], swt, {'qx':qx.item().get('pumping')[:, :, :], 'qy':qy.item().get('pumping')[:, :, :], 'qz':qz.item().get('pumping')[:, :, :], 'concentration':concentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[1][0].set_title("Concentration after pumping")
+    axs[2][0] = proc.plot_conc(axs[2][0], swt, {'qx':qx.item().get('recovery')[:, :, :], 'qy':qy.item().get('recovery')[:, :, :], 'qz':qz.item().get('recovery')[:, :, :], 'concentration':concentration.item().get('recovery')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[2][0].set_title("Concentration after recovery")
+    axs[1][0].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[2][0].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[0][1] = proc.plot_conc(axs[0][1], swt, {'qx':eqqx.item().get('steady')[:, :, :], 'qy':eqqy.item().get('steady')[:, :, :], 'qz':eqqz.item().get('steady')[:, :, :], 'concentration':eqconcentration.item().get('steady')[:, :, :]}, row, vmax=35, vmin=0)
+    axs[0][1].set_title("Steady state concentration")
+    axs[1][1] = proc.plot_conc(axs[1][1], swt, {'qx':eqqx.item().get('pumping')[:, :, :], 'qy':eqqy.item().get('pumping')[:, :, :], 'qz':eqqz.item().get('pumping')[:, :, :], 'concentration':eqconcentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[1][1].set_title("Concentration after pumping")
+    axs[2][1] = proc.plot_conc(axs[2][1], swt, {'qx':eqqx.item().get('recovery')[:, :, :], 'qy':eqqy.item().get('recovery')[:, :, :], 'qz':eqqz.item().get('recovery')[:, :, :], 'concentration':eqconcentration.item().get('recovery')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[2][1].set_title("Concentration after recovery")
+    axs[1][1].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[2][1].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+
+    x = np.linspace(0, 800, 80)
+    y = np.linspace(-25, 0, 50)
+
+    cmhk = axs[3][0].pcolormesh(x, y, np.flipud(np.log(hk)), cmap="coolwarm")
+    cmeqhk = axs[3][1].pcolormesh(x, y, np.ones_like(hk)*np.log(eqhk), cmap="coolwarm", vmax=np.max(np.log(hk)), vmin= np.min(np.log(hk)))
+    axs[3][1].set_aspect(10)
+    axs[3][0].set_aspect(10)
+    plt.colorbar(cmhk,ax=axs[3][0])
+    plt.colorbar(cmeqhk,ax=axs[3][1])
+
+    plt.savefig(f"{results_location}\\pumping_and_recovery_comparison_{modelname}.jpg", dpi=1200)
+    plt.show()    
+
+def results_single_staged(modelname, realization, lay, row, col):
+
+    qx, qy, qz, head, concentration =  proc.load_results_3D(modelname, realization, stress_period="transient")
+    qx_s, qy_s, qz_s, head_s, concentration_s =  proc.load_results_3D(modelname, realization, stress_period="steady")
+
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}_steady.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    results_location = f'.\\results\\{modelname}'
+
+    f, axs = plt.subplots(3, 1, figsize = (18, 12))
+    axs[0] = proc.plot_conc(axs[0], swt, {'qx':qx_s[:, :, :], 'qy':qy_s[:, :, :], 'qz':qz_s[:, :, :], 'concentration':concentration_s[:, :, :]}, row, vmax=35, vmin=0)
+    axs[0].set_title("Steady state concentration")
+    axs[1] = proc.plot_conc(axs[1], swt, {'qx':qx.item().get('pumping')[:, :, :], 'qy':qy.item().get('pumping')[:, :, :], 'qz':qz.item().get('pumping')[:, :, :], 'concentration':concentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[1].set_title("Concentration after pumping")
+    axs[2] = proc.plot_conc(axs[2], swt, {'qx':qx.item().get('recovery')[:, :, :], 'qy':qy.item().get('recovery')[:, :, :], 'qz':qz.item().get('recovery')[:, :, :], 'concentration':concentration.item().get('recovery')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
+    axs[2].set_title("Concentration after recovery")
+    axs[1].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    axs[2].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+    plt.savefig(f"{results_location}\\pumping_and_recovery{modelname}.jpg", dpi=1200)
+    plt.show()
 
 
 def probability_of_saline(modelname):

@@ -15,9 +15,10 @@ nlay = 50*mult
 nrow = 1
 ncol = 80*mult
 head = 0.6*mult
-perlen = 1.5e9
-dt = 1e7
-nstp = 15
+perlen = 1e9
+dt = 1e6
+nstp = perlen/dt
+onshore_proportion = 0.75
 
 def load_field():
     fields = loadmat(r'./fields/80x40x50aTest')
@@ -40,9 +41,9 @@ def calc_qinflow(qx, qy):
 
 def main():
 
-    name = "pirot2D_" + str(mult)
+    name = "pirot2Dtrial_" + str(mult)
 
-    swt = coastal.build_coastal_aquifer_model(name, Lz, Lx, Ly, nlay, nrow, ncol, head, perlen, dt, nstp)
+    swt = coastal.build_coastal_aquifer_model(name, Lz, Lx, Ly, nlay, nrow, ncol, head, perlen, dt, onshore_proportion, nstp)
     # change hk
     Kh, Kv = load_field()
     # swt.lpf.hk = np.transpose(Kh, (2, 0, 1))[:,0,:]
@@ -74,7 +75,7 @@ def main():
     # qinflow = 0.008917525
 
 
-    swt = coastal.change_to_homogenous(swt, nlay, nrow, ncol, qinflow=qinflow)
+    swt = coastal.change_to_homogenous(swt, nlay, nrow, ncol, qinflow, onshore_proportion)
     swt.dis.firstdt = 0.5e7
     swt.lpf.hk = Kh_eff
     swt.lpf.vka = Kv_eff
