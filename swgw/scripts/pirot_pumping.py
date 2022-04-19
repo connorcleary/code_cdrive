@@ -19,11 +19,11 @@ head = 0.5
 perlen = 1e9
 dt = 1e6
 nstp = 1000
-q = 1e2
-pumpT = 3650
-recT = 3650
-recQmult = 1
-onshore_proportion=0.5
+q = 3e1
+pumpT = 3650/2
+recT = 3650/2
+recQmult = 0
+onshore_proportion=0.75
 qrow = 0
 qlay = 15
 qcol = 15
@@ -99,7 +99,7 @@ def run_steady(name, k_type, realization, hk, vka, qinflow=None):
     proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "steady", name)
 
 def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, qinflow=None):
-    swt = coastal.cam_transient(name, Lz, Lx, Ly, nlay, nrow, ncol, pumpT, recT, pumpT/2000, onshore_proportion, k_type, q, qlay, qrow, qcol, recQmult, start_head, start_conc, head=head, qinflow=qinflow)
+    swt = coastal.cam_transient(name, Lz, Lx, Ly, nlay, nrow, ncol, pumpT, recT, pumpT/1000, onshore_proportion, k_type, q, qlay, qrow, qcol, recQmult, start_head, start_conc, head=head, qinflow=qinflow)
     swt.lpf.hk = hk
     swt.lpf.vka = vka
     run_model(swt)
@@ -107,7 +107,11 @@ def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, q
     concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=True, rec=True)
     proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "transient", name)
 
-def main():
+    mix, fresh, wel = proc.get_time_evolution(swt, nstp)
+
+    return mix, fresh, wel
+
+def run_single_2D():
     Kh, Kv = load_field()
     hk = np.transpose(Kh, (2, 0, 1))[:,0,:]
     vka = np.transpose(Kv, (2, 0, 1))[:,0,:]
@@ -123,10 +127,58 @@ def main():
 
     #  #pars = proc.load_equivalent_parameters(name, realization)
 
-    run_transient(name, "heterogenous", realization, hk, vka , concentration, head_steady, qinflow=None)
+    mix, fresh, wel = run_transient(name, "heterogenous", realization, hk, vka , concentration, head_steady, qinflow=None)
     qx_t, qy_t, qz_t, head_t, concentration_t =  proc.load_results_3D(name, realization, stress_period="transient")
-    results.results_single_staged(name, realization, qlay, qrow, qcol)
 
+    # results.results_single_staged(name, realization, qlay, qrow, qcol)
+
+    # proc.compare_time_evolutions(np.linspace(0, pumpT+recT, nstp*2), [[mix], [fresh], [wel]], ["heterogenous"], ["Mixing zone volume", "Freshwater volume", "Well salinity"], ["green", "blue", "red"], name)
+    movement = proc.horizontal_movement_of_groundwater(concentration, concentration_t.item().get('pumping'))
+    movement = movement*Lx/ncol
+
+    results.plot_metric_over_layers("steady_test", movement, "Lateral movement of Saline Area")
+
+
+def run_all_2D_realizations():
+    name = "2D_ergodic"
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+
+    rows = hk_all.shape[1]
+
+    concentration_steady = np.zeros((nlay, rows, ncol))
+    concentration_transient = np.zeros((nlay, rows, ncol))
+    for row in range(rows):
+        realization = f"row{row}"
+        # run_steady(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:])
+        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
+        # mix, fresh, wel = run_transient(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:], concentration, head_steady, qinflow=None)
+        qx_t, qy_t, qz_t, head_t, concentration_t =  proc.load_results_3D(name, realization, stress_period="transient")
+        # results.results_single_staged(name, realization, hk_all[:,row,:], qlay, qrow, qcol)
+
+        concentration_steady[:, row, :] = concentration[:, 0,:]
+        concentration_transient[:, row, :] = concentration_t.item().get("pumping")[:, 0, :]
+
+    movement = proc.horizontal_movement_of_groundwater(concentration_steady, concentration_transient)
+    # movement_dist = movement*Lx/ncol
+    # results.plot_metric_over_layers("steady_test", movement_dist, "Lateral movement of Saline Area")
+
+    # heatmap = proc.probability_of_movement(movement, int(ncol*onshore_proportion), nlay)
+    # X = np.linspace(Lx*onshore_proportion, 0, int(ncol*onshore_proportion))
+    # Y = np.linspace(0, -Lz, nlay)
+    # results.plot_heatmap(X, Y, heatmap, qlay)
+    
+    heatmap = proc.probability_of_salinization(concentration_steady, concentration_transient)
+    X = np.linspace(0,Lx, ncol)
+    Y = np.linspace(0, -Lz, nlay)
+
+    results.plot_heatmap(X, Y, heatmap, qlay)
+
+
+
+def main():
+    run_all_2D_realizations()
     pass 
 
     

@@ -140,7 +140,7 @@ def results_pumping_recovery_comparison_with_heterogeneity(modelname, lay, row, 
     plt.savefig(f"{results_location}\\pumping_and_recovery_comparison_{modelname}.jpg", dpi=1200)
     plt.show()    
 
-def results_single_staged(modelname, realization, lay, row, col):
+def results_single_staged(modelname, realization, hk, lay, row, col):
 
     qx, qy, qz, head, concentration =  proc.load_results_3D(modelname, realization, stress_period="transient")
     qx_s, qy_s, qz_s, head_s, concentration_s =  proc.load_results_3D(modelname, realization, stress_period="steady")
@@ -148,7 +148,7 @@ def results_single_staged(modelname, realization, lay, row, col):
     swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}_steady.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
     results_location = f'.\\results\\{modelname}'
 
-    f, axs = plt.subplots(3, 1, figsize = (18, 12))
+    f, axs = plt.subplots(4, 1, figsize = (8, 12))
     axs[0] = proc.plot_conc(axs[0], swt, {'qx':qx_s[:, :, :], 'qy':qy_s[:, :, :], 'qz':qz_s[:, :, :], 'concentration':concentration_s[:, :, :]}, row, vmax=35, vmin=0)
     axs[0].set_title("Steady state concentration")
     axs[1] = proc.plot_conc(axs[1], swt, {'qx':qx.item().get('pumping')[:, :, :], 'qy':qy.item().get('pumping')[:, :, :], 'qz':qz.item().get('pumping')[:, :, :], 'concentration':concentration.item().get('pumping')[:, :, :]}, row, vmax=35, vmin=0, zorder=1)
@@ -157,8 +157,15 @@ def results_single_staged(modelname, realization, lay, row, col):
     axs[2].set_title("Concentration after recovery")
     axs[1].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
     axs[2].scatter(col*10+5, lay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
-    plt.savefig(f"{results_location}\\pumping_and_recovery{modelname}.jpg", dpi=1200)
-    plt.show()
+
+    x = np.linspace(0, 800, 80)
+    y = np.linspace(-25, 0, 50)
+    cmhk = axs[3].pcolormesh(x, y, np.flipud(np.log(hk)), cmap="coolwarm")
+    axs[3].set_aspect(10)
+    plt.colorbar(cmhk,ax=axs[3])
+
+    plt.savefig(f"{results_location}\\pumping_and_recovery{modelname}{realization}.jpg", dpi=300)
+    # plt.show()
 
 
 def probability_of_saline(modelname):
@@ -193,6 +200,49 @@ def probability_of_saline(modelname):
     plt.show()
     
     pass
+
+def plot_metric_over_layers(modelname, metric, title):
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}_transient.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    delL = -swt.dis.botm[0,0,0]
+    nlay = swt.dis.nlay
+    (qlay, _, _, _) = swt.wel.stress_period_data['1'][-1]
+
+
+    stoch = True
+    real_color = "grey"
+    try:
+        rows = metric.shape[1]
+    except:
+        rows = 1
+
+    layers=np.linspace(0, -nlay*delL, nlay)
+
+    if rows == 1:
+        real_color = "green"
+        stoch = False
+
+    f, ax = plt.subplots()
+    ax.set_title(title)
+    ax.set_ylabel("Depth (m)")
+    for row in range(rows):
+        ax.plot(metric[:,row], layers, color=real_color, lw=0.5)
+
+    if stoch:
+        average = np.average(metric, 1)
+        ax.plot(average, layers, color="green", zorder=2)
+
+    ax.axhline(y=-qlay*delL, color = "red", linestyle=":")
+
+    plt.show()
+
+def plot_heatmap(X, Y, heatmap, qlay):
+
+    f, ax = plt.subplots()
+    cm = ax.pcolormesh(X, Y, heatmap, cmap="hot_r")
+    cb = plt.colorbar(cm)
+
+    ax.axhline(y=qlay*(Y[1]-Y[0]), color = "blue", linestyle=":")
+    plt.show()
 
 if __name__=="__main__":
     results("pirot2D_check_k_eff")

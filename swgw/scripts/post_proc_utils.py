@@ -172,13 +172,13 @@ def get_time_evolution(swt, nstp):
     headobj = bf.HeadFile(os.path.join(ws, f'{swt._BaseModel__name}.hds'))
     delV = -1*swt.dis.delc[0]*swt.dis.delr[0]*swt.dis.botm[0][0]
     
-    concentration_data = ucnobj.get_alldata()[nstp:]
+    concentration_data = ucnobj.get_alldata()[:]
     # budget_data = cbbobj.get_alldata()[15:]
     # head_data = headobj.get_alldata()[15:]
     (qlay, qrow, qcol, _) = swt.wel.stress_period_data['1'][-1]
 
     mixing_zone_evolution =  list(map(proc_functions.mixing_zone_volume, concentration_data, 2*nstp*[delV]))
-    fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], 2000*[15]))
+    fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], nstp*2*[15]))
     well_salinity = concentration_data[:,qlay,qrow,qcol]
     
     return mixing_zone_evolution, fresh_volume_evolution, well_salinity
@@ -207,3 +207,45 @@ def compare_time_evolutions(times, arrays, realizations, metrics, colors, modeln
     plt.savefig(f"{results_location}\\time_evolution_{modelname}.jpg", dpi=1200)
     plt.show()
 
+def horizontal_movement_of_groundwater(conc1, conc2):
+    '''
+    Find horizontal distance moved of saline front.
+    '''
+    original_extent = np.zeros((conc1.shape[0], conc1.shape[1]))
+    new_extent = np.zeros((conc1.shape[0], conc1.shape[1]))
+    for row in range(conc1.shape[1]):
+        for lay in range(conc1.shape[0]):
+            new_found = False
+            old_found = False
+            for col in range(conc1.shape[2]):
+                if conc1[lay, row, col] >= 0.35 and not old_found:
+                    original_extent[lay, row] = col
+                    old_found = True     
+
+                if conc2[lay, row, col] >= 0.35 and conc2[lay, row, col] <= 35 and not new_found:
+                    new_extent[lay, row] = col
+                    new_found = True
+            
+    return original_extent - new_extent
+
+def probability_of_movement(movement, ncol_onshore, nlay):
+    heatmap = np.zeros((nlay, ncol_onshore))
+    for row in range(movement.shape[1]):
+        for lay in range(movement.shape[0]):
+            if movement[lay, row] > 0:
+                heatmap[lay,-int(movement[lay, row])] += 1
+            
+    heatmap = heatmap/movement.shape[1]
+
+    return heatmap
+
+def probability_of_salinization(conc1, conc2):
+    heatmap = np.zeros_like(conc1[:, 0, :])
+    for row in range(conc1.shape[1]):
+        for lay in range(conc1.shape[0]):
+            for col in range(conc1.shape[2]):
+                if conc1[lay, row, col] < 0.35 and conc2[lay, row, col] > 0.35:
+                    heatmap[lay, col] += 1
+                
+    heatmap = heatmap/conc1.shape[1]
+    return heatmap
