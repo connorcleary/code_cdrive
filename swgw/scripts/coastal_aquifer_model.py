@@ -887,7 +887,7 @@ def cam_steady(modelname, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, nstp, onshor
         chkmas=False,
         nprobs=10,
         nprmas=10,
-        dt0=perlen/nstp
+        dt0=dt
     )
 
     adv = flopy.mt3d.Mt3dAdv(swt, 
@@ -915,7 +915,7 @@ def cam_steady(modelname, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, nstp, onshor
         densemax=0,
         denseref=1000.0,
         denseslp=0.7143,
-        firstdt=perlen/nstp,
+        firstdt=dt,
     )
 
     fname = r"./MT3D001.UCN"

@@ -31,7 +31,7 @@ def plot_conc(ax, swt, results_dict, row=0, **kwargs):
 
     ax.set_aspect(10)
     pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
-    arr = pmv.plot_array(results_dict['concentration'], **kwargs)
+    arr = pmv.plot_array(results_dict['concentration'], cmap="viridis", **kwargs)
     pmv.plot_vector(results_dict['qx'], -results_dict['qz'], -results_dict['qz'], kstep=3, hstep=3, normalize=False, color="white")
     plt.colorbar(arr, shrink=0.5, ax=ax)
 

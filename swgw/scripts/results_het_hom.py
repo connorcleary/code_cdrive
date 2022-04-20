@@ -167,6 +167,24 @@ def results_single_staged(modelname, realization, hk, lay, row, col):
     plt.savefig(f"{results_location}\\pumping_and_recovery{modelname}{realization}.jpg", dpi=300)
     # plt.show()
 
+def compare_steady_states(name, realizations, hks):
+    nreal = len(realizations)
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{name}\{name}_steady.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    results_location = f'.\\results\\{name}'
+
+    f, axs = plt.subplots(3, nreal, sharex=True, sharey=True, figsize=(18, 9))
+    for i, (realization, hk) in enumerate(zip(realizations, hks)):
+        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
+        x = np.linspace(0, 800, 80)
+        y = np.linspace(-25, 0, 50)
+        cmhk = axs[0][i].pcolormesh(x, y, np.flipud(np.log(hk)), cmap="coolwarm")
+        axs[0][i].set_aspect(10)
+        axs[1][i] = proc.plot_conc(axs[1][i], swt, {'qx':qx[:, :, :], 'qy':qy[:, :, :], 'qz':qz[:, :, :], 'concentration':concentration[:, :, :]}, row=0, vmax=35, vmin=0)
+        axs[2][i] = proc.plot_head(axs[2][i], swt, head_steady[:, :, :], vmin=-10, vmax=0.6)
+
+
+    plt.colorbar(cmhk,ax=axs[2][2])
+    plt.show()
 
 def probability_of_saline(modelname):
     _, _, _, _, concentration = proc.load_results_3D(modelname, "heterogenous")
