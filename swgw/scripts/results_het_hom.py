@@ -172,18 +172,34 @@ def compare_steady_states(name, realizations, hks):
     swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{name}\{name}_steady.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
     results_location = f'.\\results\\{name}'
 
-    f, axs = plt.subplots(3, nreal, sharex=True, sharey=True, figsize=(18, 9))
+    f, axs = plt.subplots(3, nreal, sharex=True, sharey=True, figsize=(15, 5), constrained_layout=True)
     for i, (realization, hk) in enumerate(zip(realizations, hks)):
         qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
         x = np.linspace(0, 800, 80)
         y = np.linspace(-25, 0, 50)
-        cmhk = axs[0][i].pcolormesh(x, y, np.flipud(np.log(hk)), cmap="coolwarm")
+        cmhk = axs[0][i].pcolormesh(x, y, np.flipud(np.log(hk)), cmap="coolwarm", vmax=-1, vmin=-13)
         axs[0][i].set_aspect(10)
-        axs[1][i] = proc.plot_conc(axs[1][i], swt, {'qx':qx[:, :, :], 'qy':qy[:, :, :], 'qz':qz[:, :, :], 'concentration':concentration[:, :, :]}, row=0, vmax=35, vmin=0)
-        axs[2][i] = proc.plot_head(axs[2][i], swt, head_steady[:, :, :], vmin=-10, vmax=0.6)
+        axs[1][i], conc = proc.plot_conc(axs[1][i], swt, {'qx':qx[:, :, :], 'qy':qy[:, :, :], 'qz':qz[:, :, :], 'concentration':concentration[:, :, :]}, row=0, vmax=35, vmin=0)
+        axs[2][i], head = proc.plot_head(axs[2][i], swt, head_steady[:, :, :], vmin=-0.1, vmax=0.6);
+        
 
+    axs[0][0].set_title("Heterogenenous")
+    axs[0][1].set_title("Homogeneous (equiv. head)")
+    axs[0][2].set_title("Homogeneous (equiv. flux)")
+    f.suptitle("Comparison of conductivity, concentration, and head", fontsize=16)
 
-    plt.colorbar(cmhk,ax=axs[2][2])
+    cb1 = plt.colorbar(cmhk,ax=axs[0][:], location="right", shrink=0.75, pad=0.02)
+    cb2 = plt.colorbar(conc,ax=axs[1][:], location="right", shrink=0.75, pad=0.02)
+    cb3 = plt.colorbar(head,ax=axs[2][:], location="right", shrink=0.75, pad=0.02)
+    cb1.ax.set_title('log(K)', fontsize = 'small')
+    cb2.ax.set_title('C (kg/m^3)', fontsize = 'small')
+    cb3.ax.set_title('h (m)', fontsize = 'small')
+    cb1.ax.locator_params(nbins=6)
+    cb2.ax.locator_params(nbins=4)
+    cb3.ax.locator_params(nbins=4)
+    axs[1][0].set_ylabel("Depth (m)")
+    axs[2][1].set_xlabel("Distance (m)")
+    f.set_constrained_layout_pads(w_pad=0.01, wspace=0.0)
     plt.show()
 
 def probability_of_saline(modelname):

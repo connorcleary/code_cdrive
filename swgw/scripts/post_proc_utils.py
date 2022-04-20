@@ -33,11 +33,11 @@ def plot_conc(ax, swt, results_dict, row=0, **kwargs):
     pmv = flopy.plot.PlotCrossSection(model=swt, ax=ax, line={"row": row})
     arr = pmv.plot_array(results_dict['concentration'], cmap="viridis", **kwargs)
     pmv.plot_vector(results_dict['qx'], -results_dict['qz'], -results_dict['qz'], kstep=3, hstep=3, normalize=False, color="white")
-    plt.colorbar(arr, shrink=0.5, ax=ax)
+    # plt.colorbar(arr, shrink=0.5, ax=ax)
 
-    ax.set_title("Simulated Concentrations")
+    # ax.set_title("Simulated Concentrations")
 
-    return ax
+    return ax, arr
 
 
 def plot_head(ax, swt, results_dict, row=0, **kwargs):
@@ -54,10 +54,10 @@ def plot_head(ax, swt, results_dict, row=0, **kwargs):
         
 
     ax.clabel(contours, fmt="%2.2f")
-    plt.colorbar(arr, shrink=0.5, ax=ax)
-    ax.set_title("Simulated Heads")
+    # plt.colorbar(arr, shrink=0.5, ax=ax)
+    # ax.set_title("Simulated Heads")
 
-    return ax
+    return ax, arr
 
 def extract_results(swt, nstp, pump=False, rec=False):
 

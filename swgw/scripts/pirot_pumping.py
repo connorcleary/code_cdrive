@@ -23,7 +23,7 @@ q = 3e1
 pumpT = 3650/2
 recT = 3650/2
 recQmult = 0
-onshore_proportion=0.75
+onshore_proportion=0.25
 qrow = 0
 qlay = 15
 qcol = 15
@@ -112,7 +112,7 @@ def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, q
     return mix, fresh, wel
 
 def compare_steady_states_2D():
-    name = "2D_steady_state"
+    name = "2D_steady_state_0.5"
     Kh, Kv = load_field()
     hk_all = np.transpose(Kh, (2, 0, 1))
     vka_all = np.transpose(Kv, (2, 0, 1))
@@ -122,16 +122,15 @@ def compare_steady_states_2D():
     concentration_transient = np.zeros((nlay, rows, ncol))
     for row in range(0,1):
         realization = f"row{row}"
-        run_steady(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:])
-        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
+        #run_steady(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:])
+        #qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
         Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
-        _, qinflow = calc_qinflow(qx, qz)
-        run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
-        run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow)
+        #_, qinflow = calc_qinflow(qx, qz)
+        #run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
+        #run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow)
 
     Kh_array = np.ones((nlay, ncol))*Kh_eff
     results.compare_steady_states(name, ['row0', 'row0equivalent_head', 'row0equivalent_flux'], [hk_all[:,row,:], Kh_array, Kh_array])
-    
 
 def run_single_2D():
     Kh, Kv = load_field()
