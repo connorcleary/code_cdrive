@@ -19,11 +19,11 @@ head = 0.6
 perlen = 3.65e9
 dt = 1e6
 nstp = 1000
-q = 3e1
+q = 1.5e1
 pumpT = 3650/2
 recT = 3650/2
 recQmult = 0
-onshore_proportion=0.25
+onshore_proportion=0.5
 qrow = 0
 qlay = 15
 qcol = 15
@@ -98,6 +98,9 @@ def run_steady(name, k_type, realization, hk, vka, qinflow=None):
     concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=False, rec=False)
     proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "steady", name)
 
+    concentration_data, mix, fresh, wel = proc.get_time_evolution(swt, nstp, steady=True)
+    proc.save_concentration_time_evolution(name, realization, concentration_data, stress_period="steady")
+
 def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, qinflow=None):
     swt = coastal.cam_transient(name, Lz, Lx, Ly, nlay, nrow, ncol, pumpT, recT, pumpT/1000, onshore_proportion, k_type, q, qlay, qrow, qcol, recQmult, start_head, start_conc, head=head, qinflow=qinflow)
     swt.lpf.hk = hk
@@ -107,9 +110,9 @@ def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, q
     concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=True, rec=True)
     proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "transient", name)
 
-    mix, fresh, wel = proc.get_time_evolution(swt, nstp)
+    concentration_data, mix, fresh, wel = proc.get_time_evolution(swt, nstp)
+    proc.save_concentration_time_evolution(name, realization, concentration_data, stress_period="transient")
 
-    return mix, fresh, wel
 
 def compare_steady_states_2D():
     name = "2D_steady_state_0.5"
@@ -120,17 +123,41 @@ def compare_steady_states_2D():
 
     concentration_steady = np.zeros((nlay, rows, ncol))
     concentration_transient = np.zeros((nlay, rows, ncol))
-    for row in range(0,1):
+    for row in range(rows):
         realization = f"row{row}"
         #run_steady(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:])
-        #qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
+        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
         Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
-        #_, qinflow = calc_qinflow(qx, qz)
-        #run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
-        #run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow)
+        _, qinflow_steady = calc_qinflow(qx, qz)
+        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="transient")
+        _, qinflow_transient = calc_qinflow(qx, qz)
+
+        run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
+        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_head", stress_period="steady")
+        run_transient(name, "heterogenous", realization, Kh_eff, Kv_eff, concentration, head_steady, qinflow=None)
+    	
+
+        run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow_steady)
+        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_flux", stress_period="steady")
+        run_transient(name, "heterogenous", realization, Kh_eff, Kv_eff, concentration, head_steady, qinflow=qinflow_transient)
+
+
 
     Kh_array = np.ones((nlay, ncol))*Kh_eff
     results.compare_steady_states(name, ['row0', 'row0equivalent_head', 'row0equivalent_flux'], [hk_all[:,row,:], Kh_array, Kh_array])
+
+def compare_transient_2D():
+    name = "2D_ergodic_0.5"
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+    rows = hk_all.shape[1]
+
+
+    for row in range(rows):
+        Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
+        Kh_array = np.ones((nlay, ncol))*Kh_eff
+        results.compare_transient_response(name, [f'row{row}', f'row{row}equivalent_head', f'row{row}equivalent_flux'], [hk_all[:,row,:], Kh_array, Kh_array], row, qlay, qcol)
 
 def run_single_2D():
     Kh, Kv = load_field()
@@ -161,7 +188,7 @@ def run_single_2D():
 
 
 def run_all_2D_realizations():
-    name = "2D_ergodic_colors"
+    name = "2D_ergodic_0.5"
     Kh, Kv = load_field()
     hk_all = np.transpose(Kh, (2, 0, 1))
     vka_all = np.transpose(Kv, (2, 0, 1))
@@ -170,16 +197,34 @@ def run_all_2D_realizations():
 
     concentration_steady = np.zeros((nlay, rows, ncol))
     concentration_transient = np.zeros((nlay, rows, ncol))
-    for row in range(11,12):
-        realization = f"row{row}"
-        run_steady(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:])
-        qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
-        mix, fresh, wel = run_transient(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:], concentration, head_steady, qinflow=None)
-        qx_t, qy_t, qz_t, head_t, concentration_t =  proc.load_results_3D(name, realization, stress_period="transient")
-        results.results_single_staged(name, realization, hk_all[:,row,:], qlay, qrow, qcol)
+    for row in range(rows):
+        
+            realization = f"row{row}"
+            run_steady(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:])
+            qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
+            Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
+            _, qinflow_steady = calc_qinflow(qx, qz)
+            run_transient(name, "heterogenous", realization, hk_all[:,row,:], vka_all[:,row,:], concentration, head_steady, qinflow=None)
+            qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="transient")
+            _, qinflow_pumping = calc_qinflow(qx.item().get('pumping'), qz.item().get('pumping'))
+            _, qinflow_recovery = calc_qinflow(qx.item().get('recovery'), qz.item().get('recovery'))
 
-        concentration_steady[:, row, :] = concentration[:, 0,:]
-        concentration_transient[:, row, :] = concentration_t.item().get("pumping")[:, 0, :]
+            run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
+            qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_head", stress_period="steady")
+            run_transient(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff, concentration, head_steady, qinflow=None)
+            
+            run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow_steady)
+            qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_flux", stress_period="steady")
+            run_transient(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, concentration, head_steady, qinflow=[qinflow_pumping, qinflow_recovery])
+        
+            print("Something went wrong")
+
+        # if row%5 == 0:
+        #     results.results_single_staged(name, realization+"equivalent_head", hk_all[:,row,:], qlay, qrow, qcol)
+        #     results.results_single_staged(name, realization+"equivalent_flux", hk_all[:,row,:], qlay, qrow, qcol)
+
+        # concentration_steady[:, row, :] = concentration[:, 0,:]
+        # concentration_transient[:, row, :] = concentration_t.item().get("pumping")[:, 0, :]
 
     # movement = proc.horizontal_movement_of_groundwater(concentration_steady, concentration_transient)
     # movement_dist = movement*Lx/ncol
@@ -190,19 +235,34 @@ def run_all_2D_realizations():
     # Y = np.linspace(0, -Lz, nlay)
     # results.plot_heatmap(X, Y, heatmap, qlay)
     
-    heatmap = proc.probability_of_salinization(concentration_steady, concentration_transient)
-    X = np.linspace(0,Lx, ncol)
-    Y = np.linspace(0, -Lz, nlay)
+    # heatmap = proc.probability_of_salinization(concentration_steady, concentration_transient)
+    # X = np.linspace(0,Lx, ncol)
+    # Y = np.linspace(0, -Lz, nlay)
 
-    results.plot_heatmap(X, Y, heatmap, qlay)
+    # results.plot_heatmap(X, Y, heatmap, qlay)
 
+def analyse_2D_steady_state():
+    realization_suffices = ["", "equivalent_flux", "equivalent_head"]
+    rows = range(40)
+    name = "2D_ergodic_0.5"
 
+    results.compute_steadystate_statistics(name, realization_suffices, rows)
 
 def main():
-    compare_steady_states_2D()
-    pass 
+    # compare_steady_states_2D()
+    # run_all_2D_realizations()
+    # analyse_2D_steady_state()
+    name = "2D_ergodic_0.5"
+    # realizations = ["", "equivalent_flux", "equivalent_head"]
+    # proc.get_steady_state_time_evolutions(name, realizations, 40)
 
-    
+    # results.plot_steady_time_evolutions(name, realizations)
+    # proc.get_transient_time_evolutions(name, realizations, 40, qcol, qlay)
+    realizations = ["heterogenous", "equivalent_flux", "equivalent_head"]
+    # results.plot_transient_time_evolutions(name, realizations)
+    # results.transient_box_plots(name, realizations, range(40), qcol, qlay)
+    # results.plot_well_ensemble(name, realizations)
+    compare_transient_2D()
 
 
 if __name__ == "__main__":

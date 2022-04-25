@@ -1030,8 +1030,10 @@ def cam_transient(modelname, Lz, Lx, Ly, nlay, nrow, ncol, pumpT, recT, dt, onsh
     ssm_data[1] = np.append(ssm_sp1,[[qlay, qrow, qcol, 0.0, itype['WEL']]], axis=0)
     chd_data[0] = chd_sp1
     chd_data[1] = chd_sp1
-    wel_data[0] = np.append(wel_sp1,[(qlay, qrow, qcol, -q)])
-    wel_data[1] = np.append(wel_sp1, [(qlay, qrow, qcol, q*recQmult)])
+    wel_sp1.append([qlay, qrow, qcol, -q])
+    wel_sp2.append([qlay, qrow, qcol, q*recQmult])
+    wel_data[0] = wel_sp1
+    wel_data[1] = wel_sp2
 
     wel = flopy.modflow.ModflowWel(swt, stress_period_data=wel_data, ipakcb=53)  
 

@@ -18,14 +18,41 @@ def find_mixing_zone(conc):
 
     return mixing_zone
 
+def find_fresh_water_volume(concentration, delV, colq):
+    '''
+    Calculate the volume of fresh water seaward of the pumping locationY
+    '''
+    fresh = 0
+    for i in range(concentration.shape[0]):
+            for k in range(colq, concentration.shape[1]):
+                if 0.35 > concentration[i][k]:
+                    fresh += 1
+    return fresh*5
+
 
 def find_toe_penetration(conc):
     for i in range(conc.shape[1]):
         if conc[-1][i] > 0.5:
-            return (conc.shape[1]/4 - i)*10
+            return (conc.shape[1]/2 - i)*10
 
-def find_sgd(names):
-    return sgd_fresh, sgd_saline
+def find_sgd(conc, qz, onshore_proportion):
+    sgd = 0
+    for j in range(int(conc.shape[1]*onshore_proportion), conc.shape[1]):
+            if 3.5 <= conc[0, j] and qz[0, j] > 0:
+                sgd += np.max([float(0), qz[0,j]])
+    return sgd
+
+def find_mixing_com(conc, Lx):
+    x_tot = 0 
+    mix_n = 0
+
+    for i in range(conc.shape[0]):
+        for j in range(conc.shape[1]):
+            if 3.5 <= conc[i, j] <= 31.5:
+                mix_n += 1 
+                x_tot += j/conc.shape[1]*Lx-Lx/2
+
+    return x_tot/mix_n
 
 def plot_conc(ax, swt, results_dict, row=0, **kwargs):
 
@@ -163,7 +190,15 @@ def load_results_3D(modelname, realization, stress_period=None):
 
     return qx, qy, qz, head, concentration
 
-def get_time_evolution(swt, nstp):
+def load_time_evolution_3D(modelname, realization, stress_period=None):
+
+    ws = os.path.join(f'.\\results\\{modelname}')
+
+    with open(os.path.join(ws, f"concentration_time_evolution_{realization}{stress_period}.npy"), 'rb') as f: evol = np.load(f, allow_pickle=True)
+
+    return evol
+
+def get_time_evolution(swt, nstp, steady=False):
 
     ws = swt._model_ws
     ucnobj = bf.UcnFile(os.path.join(ws, "MT3D001.UCN"), model=swt)
@@ -175,19 +210,27 @@ def get_time_evolution(swt, nstp):
     concentration_data = ucnobj.get_alldata()[:]
     # budget_data = cbbobj.get_alldata()[15:]
     # head_data = headobj.get_alldata()[15:]
-    (qlay, qrow, qcol, _) = swt.wel.stress_period_data['1'][-1]
+    if not steady:
+        (qlay, qrow, qcol, _) = swt.wel.stress_period_data['1'][-1]
+        well_salinity = concentration_data[:,qlay,qrow,qcol]
+    else:
+        well_salinity = None
 
     mixing_zone_evolution =  list(map(proc_functions.mixing_zone_volume, concentration_data, 2*nstp*[delV]))
     fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], nstp*2*[15]))
-    well_salinity = concentration_data[:,qlay,qrow,qcol]
     
-    return mixing_zone_evolution, fresh_volume_evolution, well_salinity
+    return concentration_data, mixing_zone_evolution, fresh_volume_evolution, well_salinity
+
+def save_concentration_time_evolution(modelname, realization, concentration_time_evolution, stress_period=None):
+    ws = os.path.join(f'.\\results\\{modelname}')
+    with open(os.path.join(ws, f"concentration_time_evolution_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(concentration_time_evolution))
 
 def compare_time_evolutions(times, arrays, realizations, metrics, colors, modelname):
     '''
         Compare time evolutions for a number of metrics between a number of
         realizations
     '''
+
     f, axs = plt.subplots(len(metrics), sharex=True, figsize=(15, 12))
     for mdx, (array, metric) in enumerate(zip(arrays, metrics)):
         for series, realization in zip(array, realizations):
@@ -240,6 +283,7 @@ def probability_of_movement(movement, ncol_onshore, nlay):
     return heatmap
 
 def probability_of_salinization(conc1, conc2):
+
     heatmap = np.zeros_like(conc1[:, 0, :])
     for row in range(conc1.shape[1]):
         for lay in range(conc1.shape[0]):
@@ -249,3 +293,81 @@ def probability_of_salinization(conc1, conc2):
                 
     heatmap = heatmap/conc1.shape[1]
     return heatmap
+
+def get_steady_state_time_evolutions(name, realizations, rows):
+
+    concentration = [[] for i in range(len(realizations))]
+    
+    for i, realization in enumerate(realizations):
+        for j in range(rows):
+            concentration[i].append(load_time_evolution_3D(name, f"row{j}{realization}","steady"))
+
+    # com = np.zeros((i+1, j+1, int(0.05*len(concentration[0][0])))) 
+    # toe = np.zeros((i+1, j+1, int(0.05*len(concentration[0][0]))))
+    # mix = np.zeros((i+1, j+1, int(0.05*len(concentration[0][0]))))
+    com = np.zeros((i+1, j+1, 30))
+    toe = np.zeros((i+1, j+1, 30))
+    mix = np.zeros((i+1, j+1, 30))
+
+    for i in range(len(realizations)):
+        for j in range(rows):
+            for kdx, k in enumerate(np.logspace(0, 3.56, base=10, num=30).astype(int)):
+                com[i, j, kdx] = find_mixing_com(concentration[i][j][k][:,0,:], 800)
+                toe[i, j, kdx] = find_toe_penetration(concentration[i][j][k][:,0,:])
+                mix[i, j, kdx] = find_mixing_zone(concentration[i][j][k][:,0,:])
+
+    results_location = f'.\\results\\{name}'
+    np.save(f"{results_location}\\com_evolution_log", com)
+    np.save(f"{results_location}\\toe_evolution_log", toe)
+    np.save(f"{results_location}\\mix_evolution_log", mix)
+    pass
+
+def get_transient_time_evolutions(name, realizations, rows, qcol, qlay):
+
+    concentration = [[] for i in range(len(realizations))]
+    
+    for i, realization in enumerate(realizations):
+        for j in range(rows):
+            concentration[i].append(load_time_evolution_3D(name, f"row{j}{realization}","transient"))
+
+    com = np.zeros((i+1, j+1, 50))
+    toe = np.zeros((i+1, j+1, 50))
+    mix = np.zeros((i+1, j+1, 50))
+    fresh = np.zeros((i+1, j+1, 50))
+    wel = np.zeros((i+1, j+1, 50))
+
+    for i in range(len(realizations)):
+        for j in range(rows):
+            for kdx, k in enumerate(np.linspace(0, 1000, 50).astype(int)):
+                com[i, j, kdx] = find_mixing_com(concentration[i][j][k][:,0,:], 800)
+                toe[i, j, kdx] = find_toe_penetration(concentration[i][j][k][:,0,:])
+                mix[i, j, kdx] = find_mixing_zone(concentration[i][j][k][:,0,:])
+                fresh[i, j, kdx] = find_fresh_water_volume(concentration[i][j][k][:,0,:], 5, qcol)
+                wel[i, j, kdx] = concentration[i][j][k][qlay,0,qcol]
+
+    results_location = f'.\\results\\{name}'
+    np.save(f"{results_location}\\com_evolution_transient", com)
+    np.save(f"{results_location}\\toe_evolution_transient", toe)
+    np.save(f"{results_location}\\mix_evolution_transient", mix)
+    np.save(f"{results_location}\\fresh_evolution_transient", fresh)
+    np.save(f"{results_location}\\wel_evolution_transient", wel)
+    pass
+
+def load_steady_metric_evolutions(name):
+
+    results_location = f'.\\results\\{name}'
+    com = np.load(f"{results_location}\\com_evolution_log.npy", allow_pickle=True)
+    toe = np.load(f"{results_location}\\toe_evolution_log.npy", allow_pickle=True)
+    mix = np.load(f"{results_location}\\mix_evolution_log.npy", allow_pickle=True)
+
+    return com, toe, mix
+
+def load_transient_metric_evolutions(name):
+    results_location = f'.\\results\\{name}'
+    com = np.load(f"{results_location}\\com_evolution_transient.npy", allow_pickle=True)
+    toe = np.load(f"{results_location}\\toe_evolution_transient.npy", allow_pickle=True)
+    mix = np.load(f"{results_location}\\mix_evolution_transient.npy", allow_pickle=True)
+    fresh = np.load(f"{results_location}\\fresh_evolution_transient.npy", allow_pickle=True)
+    wel = np.load(f"{results_location}\\wel_evolution_transient.npy", allow_pickle=True)
+
+    return com, toe, mix, fresh, wel
