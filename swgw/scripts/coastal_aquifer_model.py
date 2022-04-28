@@ -906,7 +906,8 @@ def cam_steady(modelname, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, nstp, onshor
     # lmt = flopy.modflow.ModflowLmt(swt)
     dsp = flopy.mt3d.Mt3dDsp(swt, al=0.4, trpt=0.1, trpv=0.01, dmcoef=1e-9)
     gcg = flopy.mt3d.Mt3dGcg(swt, iter1=500, mxiter=1, isolve=2, cclose=1e-5)
-    ssm = flopy.mt3d.Mt3dSsm(swt, stress_period_data=ssm_data, mxss=500)
+    mxss = int(np.ceil(2*nlay*nrow + nrow*ncol*(1-onshore_proportion)+1))
+    ssm = flopy.mt3d.Mt3dSsm(swt, stress_period_data=ssm_data, mxss=mxss)
 
     vdf = flopy.seawat.SeawatVdf(
         swt,

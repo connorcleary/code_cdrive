@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 
 flipped=False
 Lx = 800.0
-Ly = 10.0
+Ly = 400.0
 Lz = 25.0
 nlay = 50
-nrow = 1
+nrow = 40
 ncol = 80
 head = 0.6
 perlen = 3.65e9
@@ -95,10 +95,10 @@ def run_steady(name, k_type, realization, hk, vka, qinflow=None):
     swt.lpf.vka = vka
     run_model(swt)
 
-    concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=False, rec=False)
-    proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "steady", name)
+    # concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=False, rec=False)
+    # proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "steady", name)
 
-    concentration_data, mix, fresh, wel = proc.get_time_evolution(swt, nstp, steady=True)
+    concentration_data = proc.get_time_evolution(swt, nstp, steady=True)
     proc.save_concentration_time_evolution(name, realization, concentration_data, stress_period="steady")
 
 def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, qinflow=None):
@@ -112,7 +112,6 @@ def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, q
 
     concentration_data, mix, fresh, wel = proc.get_time_evolution(swt, nstp)
     proc.save_concentration_time_evolution(name, realization, concentration_data, stress_period="transient")
-
 
 def compare_steady_states_2D():
     name = "2D_steady_state_0.5"
@@ -153,11 +152,44 @@ def compare_transient_2D():
     vka_all = np.transpose(Kv, (2, 0, 1))
     rows = hk_all.shape[1]
 
-
     for row in range(rows):
         Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
         Kh_array = np.ones((nlay, ncol))*Kh_eff
         results.compare_transient_response(name, [f'row{row}', f'row{row}equivalent_head', f'row{row}equivalent_flux'], [hk_all[:,row,:], Kh_array, Kh_array], row, qlay, qcol)
+
+def plot_effective_conductivities():
+    name = "2D_ergodic_0.5"
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+    rows = hk_all.shape[1]
+
+    Kv_all = np.zeros(rows)
+    Kh_all = np.zeros(rows)
+
+    for row in range(rows):
+        Kv_all[row], Kh_all[row], qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
+        
+    results.plot_effective_conductivities(Kh_all, Kv_all)
+
+def compare_wel_conductivity():
+    name = "2D_ergodic_0.5"
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+    rows = hk_all.shape[1]
+
+    Kv_all = np.zeros(rows)
+    Kh_all = np.zeros(rows)
+
+    for row in range(rows):
+        Kv_all[row], Kh_all[row], qinflow_bad = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
+    
+    com, toe, mix, fresh, wel = proc.load_transient_metric_evolutions(name)
+    realizations = ["heterogenous", "equivalent_flux", "equivalent_head"]
+    wel = wel[:,:,-1]
+    results.compare_wel_salinity_with_effective_conductivity(Kh_all, Kv_all, wel, realizations)
+    pass
 
 def run_single_2D():
     Kh, Kv = load_field()
@@ -185,7 +217,6 @@ def run_single_2D():
     movement = movement*Lx/ncol
 
     results.plot_metric_over_layers("steady_test", movement, "Lateral movement of Saline Area")
-
 
 def run_all_2D_realizations():
     name = "2D_ergodic_0.5"
@@ -241,6 +272,36 @@ def run_all_2D_realizations():
 
     # results.plot_heatmap(X, Y, heatmap, qlay)
 
+def run_all_3D_realizations(name):
+
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+
+    rows = hk_all.shape[1]
+
+    concentration_steady = np.zeros((nlay, rows, ncol))
+    concentration_transient = np.zeros((nlay, rows, ncol))
+
+    realization = f"pirot_basic"
+    # run_steady(name, "heterogenous", realization, hk_all, vka_all)
+    qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
+    Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all, vka_all, Lx, Ly, Lz, head, 0)
+    _, qinflow_steady = calc_qinflow(qx, qz)
+    # run_transient(name, "heterogenous", realization, hk_all, vka_all, concentration, head_steady, qinflow=None)
+    # qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="transient")
+    # _, qinflow_pumping = calc_qinflow(qx.item().get('pumping'), qz.item().get('pumping'))
+    # _, qinflow_recovery = calc_qinflow(qx.item().get('recovery'), qz.item().get('recovery'))
+
+    run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
+    # qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_head", stress_period="steady")
+    # run_transient(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff, concentration, head_steady, qinflow=None)
+    
+    run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow_steady)
+    # qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_flux", stress_period="steady")
+    # run_transient(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, concentration, head_steady, qinflow=[qinflow_pumping, qinflow_recovery])
+
+
 def analyse_2D_steady_state():
     realization_suffices = ["", "equivalent_flux", "equivalent_head"]
     rows = range(40)
@@ -248,21 +309,99 @@ def analyse_2D_steady_state():
 
     results.compute_steadystate_statistics(name, realization_suffices, rows)
 
+def compare_distance_moved(name, realizations, rows):
+
+    movement = np.zeros((len(realizations), rows, nlay))
+    for i, realization in enumerate(realizations):
+        for row in range(rows):
+            realization_name = f"row{row}{realization}"
+            _, _, _, _, concentration =  proc.load_results_3D(name, realization_name, stress_period="steady")
+            _, _, _, _, concentration_t =  proc.load_results_3D(name, realization_name, stress_period="transient")
+            movement_temp = proc.horizontal_movement_of_groundwater(concentration, concentration_t.item().get('pumping'))
+
+            movement[i,row,:] = movement_temp[:,0]*Lx/ncol
+
+    realizations[0] = "heterogenous"
+    results.plot_metric_over_layers(name, movement.T, realizations, "Lateral movement of Saline Area")
+
+def compare_probability_distance_moved(name, realizations, rows):
+
+    movement = np.zeros((len(realizations), rows, nlay))
+    for i, realization in enumerate(realizations):
+        for row in range(rows):
+            realization_name = f"row{row}{realization}"
+            _, _, _, _, concentration =  proc.load_results_3D(name, realization_name, stress_period="steady")
+            _, _, _, _, concentration_t =  proc.load_results_3D(name, realization_name, stress_period="transient")
+            movement_temp = proc.horizontal_movement_of_groundwater(concentration, concentration_t.item().get('pumping'))
+
+            movement[i,row,:] = movement_temp[:,0]*Lx/ncol
+
+    realizations[0] = "heterogenous"
+
+    results.plot_metric_as_heatmap_layered(name, movement, realizations, "title")
+
+def compare_heat_maps(name, realizations, rows):
+    heatmaps = [[]]*len(realizations)
+    concentration_steady = np.zeros((nlay, rows, ncol))
+    concentration_transient = np.zeros((nlay, rows, ncol))
+    X = np.linspace(0, Lx, int(ncol))
+    Y = np.linspace(0, -Lz, nlay)
+
+    for i, realization in enumerate(realizations):
+        concentration_steady = np.zeros((nlay, rows, ncol))
+        concentration_transient = np.zeros((nlay, rows, ncol))
+        for row in range(rows):
+            realization_name = f"row{row}{realization}"
+            _, _, _, _, concentration =  proc.load_results_3D(name, realization_name, stress_period="steady")
+            _, _, _, _, concentration_t =  proc.load_results_3D(name, realization_name, stress_period="transient")
+            concentration_steady[:, row, :] = concentration[:, 0,:]
+            concentration_transient[:, row, :] = concentration_t.item().get("pumping")[:, 0, :]
+            
+        heatmaps[i] = proc.probability_of_salinization(concentration_steady, concentration_transient)
+    
+    realizations[0] = "heterogenous"
+    results.plot_heatmaps(X, Y, name, heatmaps, qlay, realizations)
+
+def compare_steady_evolutions_with_hk():
+    name = "2D_ergodic_0.5"
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+    rows = hk_all.shape[1]
+
+    Kh_all = np.zeros(rows)
+
+    for row in range(rows):
+        _, Kh_all[row], _ = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
+        
+    results.plot_steady_time_evolution_ensemble(name, realizations=["heterogenous", "equivalent_flux", "equivalent_head"], hk=Kh_all)
+
 def main():
     # compare_steady_states_2D()
     # run_all_2D_realizations()
     # analyse_2D_steady_state()
-    name = "2D_ergodic_0.5"
-    # realizations = ["", "equivalent_flux", "equivalent_head"]
+    name = "3D_0.5"
+    run_all_3D_realizations(name)
+    realizations = ["", "equivalent_flux", "equivalent_head"]
     # proc.get_steady_state_time_evolutions(name, realizations, 40)
 
     # results.plot_steady_time_evolutions(name, realizations)
+    # results.plot_steady_time_evolution_ensemble(name)
+
     # proc.get_transient_time_evolutions(name, realizations, 40, qcol, qlay)
-    realizations = ["heterogenous", "equivalent_flux", "equivalent_head"]
+    # realizations = ["", "equivalent_flux", "equivalent_head"]
+    # results.compute_steadystate_statistics(name, realizations, range(40))
     # results.plot_transient_time_evolutions(name, realizations)
     # results.transient_box_plots(name, realizations, range(40), qcol, qlay)
     # results.plot_well_ensemble(name, realizations)
-    compare_transient_2D()
+    # compare_transient_2D()
+    # plot_effective_conductivities()
+    #compare_wel_conductivity()
+    # compare_probability_distance_moved(name, realizations, 40)
+    # compare_heat_maps(name, realizations, 40)
+    # compare_steady_evolutions_with_hk()
+
+    pass
 
 
 if __name__ == "__main__":

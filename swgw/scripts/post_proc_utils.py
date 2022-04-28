@@ -38,8 +38,8 @@ def find_toe_penetration(conc):
 def find_sgd(conc, qz, onshore_proportion):
     sgd = 0
     for j in range(int(conc.shape[1]*onshore_proportion), conc.shape[1]):
-            if 3.5 <= conc[0, j] and qz[0, j] > 0:
-                sgd += np.max([float(0), qz[0,j]])
+            if 3.5 >= conc[0, j] and qz[0, j] < 0:
+                sgd += np.max([float(0), -qz[0,j]])
     return sgd
 
 def find_mixing_com(conc, Lx):
@@ -205,21 +205,21 @@ def get_time_evolution(swt, nstp, steady=False):
     times = ucnobj.get_times()
     cbbobj = bf.CellBudgetFile(os.path.join(ws, f'{swt._BaseModel__name}.cbc'))
     headobj = bf.HeadFile(os.path.join(ws, f'{swt._BaseModel__name}.hds'))
-    delV = -1*swt.dis.delc[0]*swt.dis.delr[0]*swt.dis.botm[0][0]
+    delV = -1*swt.dis.delc[0]*swt.dis.delr[0]*swt.dis.botm.array[0][0][0]
     
     concentration_data = ucnobj.get_alldata()[:]
     # budget_data = cbbobj.get_alldata()[15:]
     # head_data = headobj.get_alldata()[15:]
-    if not steady:
-        (qlay, qrow, qcol, _) = swt.wel.stress_period_data['1'][-1]
-        well_salinity = concentration_data[:,qlay,qrow,qcol]
-    else:
-        well_salinity = None
+    # if not steady:
+    #     (qlay, qrow, qcol, _) = swt.wel.stress_period_data['1'][-1]
+    #     well_salinity = concentration_data[:,qlay,qrow,qcol]
+    # else:
+    #     well_salinity = None
 
-    mixing_zone_evolution =  list(map(proc_functions.mixing_zone_volume, concentration_data, 2*nstp*[delV]))
-    fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], nstp*2*[15]))
+    # mixing_zone_evolution =  list(map(proc_functions.mixing_zone_volume, concentration_data, 2*nstp*[delV]))
+    # fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], nstp*2*[15]))
     
-    return concentration_data, mixing_zone_evolution, fresh_volume_evolution, well_salinity
+    return concentration_data
 
 def save_concentration_time_evolution(modelname, realization, concentration_time_evolution, stress_period=None):
     ws = os.path.join(f'.\\results\\{modelname}')
@@ -288,7 +288,7 @@ def probability_of_salinization(conc1, conc2):
     for row in range(conc1.shape[1]):
         for lay in range(conc1.shape[0]):
             for col in range(conc1.shape[2]):
-                if conc1[lay, row, col] < 0.35 and conc2[lay, row, col] > 0.35:
+                if conc1[lay, row, col] < 3.5 and conc2[lay, row, col] > 3.5:
                     heatmap[lay, col] += 1
                 
     heatmap = heatmap/conc1.shape[1]

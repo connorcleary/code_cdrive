@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np 
 import flopy
+from pyrsistent import v
 import post_proc_utils as proc
+import matplotlib.cm as cm
 
 def single_results(modelname):
     pass
@@ -246,6 +248,9 @@ def compare_transient_response(name, realizations, hks, row, qlay, qcol):
     plt.savefig(f"{results_location}\\transient_comparison_row{row}.png", dpi=300)
 
 def probability_of_saline(modelname):
+    """
+        For 3D
+    """
     _, _, _, _, concentration = proc.load_results_3D(modelname, "heterogenous")
     _, _, _, _, concentration_eq = proc.load_results_3D(modelname, "homogenous")
     concentration_counts = np.zeros((concentration.shape[0],concentration.shape[2]))
@@ -273,12 +278,11 @@ def probability_of_saline(modelname):
     ax.plot(homogenous_interface, homogenous_y, color='black')
     cb = plt.colorbar(prob)
     ax.set_title("Probability of salinization")
-    ax, 
     plt.show()
     
     pass
 
-def plot_metric_over_layers(modelname, metric, title):
+def plot_metric_over_layers(modelname, metric, realizations, title):
     swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}_transient.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
     delL = -swt.dis.botm[0,0,0]
     nlay = swt.dis.nlay
@@ -298,27 +302,92 @@ def plot_metric_over_layers(modelname, metric, title):
         real_color = "green"
         stoch = False
 
-    f, ax = plt.subplots()
-    ax.set_title(title)
-    ax.set_ylabel("Depth (m)")
-    for row in range(rows):
-        ax.plot(metric[:,row], layers, color=real_color, lw=0.5)
+    f, axs = plt.subplots(1, len(realizations), constrained_layout=True, sharey=True)
+    f.suptitle(title)
+    axs[0].set_ylabel("Depth (m)")
+    for i, realization in enumerate(realizations):
+        metric_real = metric[:,:,i]
+        axs[i].set_xlabel("movement inland (m)")
+        for row in range(rows):
+            axs[i].plot(metric_real[:,row], layers, color=real_color, lw=0.5, label="_nolegend_")
+        axs[i].plot(metric_real[:,0], layers, color=real_color, lw=0.5, label="single row")
 
-    if stoch:
-        average = np.average(metric, 1)
-        ax.plot(average, layers, color="green", zorder=2)
+        if stoch:
+            average = np.average(metric_real, 1)
+            axs[i].plot(average, layers, color="green", zorder=2, label="average")
 
-    ax.axhline(y=-qlay*delL, color = "red", linestyle=":")
+        axs[i].axhline(y=-qlay*delL, color = "red", linestyle=":", label="well layer")
+        axs[i].set_title(realization)
 
+    axs[i].legend(bbox_to_anchor=(1.04, 0.5), loc='center left')
     plt.show()
 
-def plot_heatmap(X, Y, heatmap, qlay):
+def plot_metric_as_heatmap_layered(modelname, metric, realizations, title):
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}_transient.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    delL = -swt.dis.botm[0,0,0]
+    nlay = swt.dis.nlay
+    (qlay, _, _, _) = swt.wel.stress_period_data['1'][-1]
 
-    f, ax = plt.subplots()
-    cm = ax.pcolormesh(X, Y, heatmap, cmap="hot_r")
-    cb = plt.colorbar(cm)
 
-    ax.axhline(y=qlay*(Y[1]-Y[0]), color = "blue", linestyle=":")
+    stoch = True
+    real_color = "grey"
+    try:
+        rows = metric.shape[1]
+    except:
+        rows = 1
+
+    layers=np.linspace(0, -nlay*delL, nlay)
+
+    if rows == 1:
+        real_color = "green"
+        stoch = False
+
+    f, axs = plt.subplots(1, len(realizations), constrained_layout=True, sharey=True)
+    f.suptitle("Probability of lateral movement of mixing zone")
+    axs[0].set_ylabel("Depth (m)")
+    metric_real0 = metric[0,:,:]
+    range_dist = range(int(np.min(metric_real0)), int(np.max(metric_real0)+10), 10)
+    for i, realization in enumerate(realizations):
+        metric_real = metric[i,:,:]
+        probability = np.zeros((nlay, len(range_dist)))
+        axs[i].set_xlabel("movement inland (m)")
+        for row in range(rows):
+            for lay in range(nlay):
+                for j, distance in enumerate(range_dist):
+                    if (metric_real[row, lay] >= distance and distance >= 0) or (metric_real[row, lay] <= distance and distance < 0):
+                        probability[lay, j] += 1
+
+        prob = axs[i].pcolor(range_dist, layers, probability/rows, cmap="coolwarm")
+    # ax.plot(X, Y, homogenous_interface, homogenous_y, color='black')
+        axs[i].set_title(realization)
+
+        axs[i].axhline(y=-qlay*delL, color = "red", linestyle=":", label="well layer")
+
+    cb = plt.colorbar(prob, ax=axs[:], location="bottom", shrink=0.2)
+    axs[i].legend(bbox_to_anchor=(1.04, 0.5), loc='center left')
+    plt.show()
+
+def plot_heatmaps(X, Y, modelname, heatmaps, qlay, realizations):
+
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{modelname}\{modelname}_transient.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    delL = -swt.dis.botm[0,0,0]
+    nlay = swt.dis.nlay
+    (qlay, _, _, _) = swt.wel.stress_period_data['1'][-1]
+
+    f, axs = plt.subplots(1, len(realizations), constrained_layout=True, sharey=True)
+    f.suptitle("Probable area salinized")
+    axs[0].set_ylabel("Depth (m)")
+
+    for i, realization in enumerate(realizations):
+        axs[i].set_xlabel("x (m)")
+        axs[i].set_aspect(10)
+        cm = axs[i].pcolormesh(X, Y, heatmaps[i], cmap="coolwarm")
+        axs[i].set_title(realization)
+        axs[i].scatter(15*10+5, qlay*(-0.5) - 0.25, c='red', edgecolors='black', zorder=2)
+        # axs[i].axhline(y=qlay*(Y[1]-Y[0]), color = "red", linestyle=":", label="well layer")
+
+    cb = plt.colorbar(cm, ax=axs[:], location="bottom", shrink=0.2)
+    axs[i].legend(bbox_to_anchor=(1.04, 0.5), loc='center left')
     plt.show()
 
 def compute_steadystate_statistics(name, realizations, rows):
@@ -351,21 +420,21 @@ def compute_steadystate_statistics(name, realizations, rows):
                                 ['toe position (m)', 'mixing_area (m^2)', 'centre of mass position (m)', 'sgd flux (m^3/day)']):
         f, ax = plt.subplots()
         ax.boxplot([metric[0, :], metric[1, :], metric[2, :]], labels=["heterogenous", "equivalent flux", "equivalent head"])
-        if name == 'centre_of_mass': ax.axhline(400, c='r', zorder = -1, linestyle=':')
+        if name == 'centre_of_mass': ax.axhline(0, c='r', zorder = -1, linestyle=':')
         ax.set_title(name)
         plt.show()
 
-    # f, ax = plt.subplots()
-    # colors = ['r', 'b', 'g']
-    # labels=["heterogenous", "equivalent flux", "equivalent head"]
-    # for i in range(len(realizations)):
-    #     ax.scatter(centre_of_mass[i,:], fresh_sgd_flux[i,:], c=colors[i], label=labels[i])
+    f, ax = plt.subplots()
+    colors = ['r', 'b', 'g']
+    labels=["heterogenous", "equivalent flux", "equivalent head"]
+    for i in range(len(realizations)):
+        ax.scatter(centre_of_mass[i,:], fresh_sgd_flux[i,:], c=colors[i], label=labels[i])
 
-    # ax.set_title("Fresh SGD vs COM of mixing zone")
-    # ax.set_ylabel("sgd (m^3/day)")
-    # ax.set_xlabel("com position (m)")
-    # ax.legend()
-    # plt.show()
+    ax.set_title("Fresh SGD vs COM of mixing zone")
+    ax.set_ylabel("sgd (m^3/day)")
+    ax.set_xlabel("com position (m)")
+    ax.legend()
+    plt.show()
 
 def transient_box_plots(name, realizations, rows, qcol, qlay):
     n = len(rows)
@@ -446,6 +515,89 @@ def plot_steady_time_evolutions(name, realizations):
     # axs[2].
     pass
 
+def plot_steady_time_evolution_ensemble(name, realizations="heterogenous", hk=None):
+
+    # colors = plt.cm.jet(np.linspace(0,1,40))
+    # colors = np.concatenate((colors, colors, colors, colors))
+    norm = plt.Normalize()
+    colors = plt.cm.coolwarm(norm(np.log10(hk)))
+
+    com, toe, mix = proc.load_steady_metric_evolutions(name)
+    com_mean = np.mean(com, axis=1)
+    com_median = np.median(com, axis=1)
+    com_lower = np.percentile(com, 25, axis = 1)
+    com_upper = np.percentile(com, 75, axis = 1)
+    toe_mean = np.mean(toe, axis=1)
+    toe_median = np.median(toe, axis=1)
+    toe_lower = np.percentile(toe, 25, axis = 1)
+    toe_upper = np.percentile(toe, 75, axis = 1)
+    mix_mean = np.mean(mix, axis=1)
+    mix_median = np.median(mix, axis=1)
+    mix_lower = np.percentile(mix, 25, axis = 1)
+    mix_upper = np.percentile(mix, 75, axis = 1)
+    
+    c = ["r", "b", "g"]
+    f, axs = plt.subplots(3, len(realizations), sharex=True, sharey="row", constrained_layout=True)
+    t = 1/365*1e6*np.logspace(0, 3.56, base=10, num=30).astype(int)
+
+    commin = np.min(com.flatten()) -50
+    commax = np.max(com.flatten()) +50
+    toemin = np.min(toe.flatten()) -50
+    toemax = np.max(toe.flatten()) +50
+    mixmin = np.min(mix.flatten()) -50
+    mixmax = np.max(mix.flatten()) +50
+
+    for real in range(len(realizations)):
+
+        axs[0][real].set_xscale('log')
+        axs[1][real].set_xscale('log')
+        axs[2][real].set_xscale('log')
+
+        axs[0][real].set_ylim(commin, commax)
+        axs[1][real].set_ylim(toemin, toemax)
+        axs[2][real].set_ylim(mixmin, mixmax)
+
+        i = 0
+        for j in range(40):
+            axs[0][real].plot(t, com[real,j,:].T, c=colors[j], alpha=1, linewidth=0.35)
+            axs[1][real].plot(t, toe[real,j,:], c=colors[j], label="_nolegend_", alpha=1, linewidth=0.35)
+            axs[2][real].plot(t, mix[real,j,:], c=colors[j],label="_nolegend_", alpha=1, linewidth=0.35)
+
+        axs[0][real].plot(t, com_mean[real], c=c[2])
+        axs[1][real].plot(t, toe_mean[real], c=c[2], label= f"{realizations[real]} mean")
+        axs[2][real].plot(t, mix_mean[real], c=c[2], label= f"ensemble mean")
+        axs[0][real].plot(t, com_median[real], c=c[2], linestyle=":")
+        axs[1][real].plot(t, toe_median[real], c=c[2], linestyle=":", label= f"{realizations[real]} median")
+        axs[2][real].plot(t, mix_median[real], c=c[2], linestyle=":", label= f"ensemble median")
+
+        axs[2][real].set_xlabel("log(years)")
+
+    axs[0][0].set_ylabel("distance offshore (m)")
+    axs[1][0].set_ylabel("distance onshore (m)")
+    axs[2][0].set_ylabel("area (m^2)")
+
+    # axs[0][1].set_title("Centre of mass of mixing zone")
+    # axs[1][1].set_title("Toe position")
+    # axs[2][1].set_title("Area of mixing zone")
+
+    axs[0][0].set_title("Heterogenous")
+    axs[0][1].set_title("Equivalent flux")
+    axs[0][2].set_title("Equivalent head")
+
+    for ax, row in zip(axs[:,0], ["Centre of mass of mixing zone", "Toe position", "Area of mixing zone"]):
+        ax.annotate(row, xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - 5, 0),
+                xycoords=ax.yaxis.label, textcoords='offset points',
+                size='large', ha='right', va='center',rotation=90)
+
+    axs[2][1].legend(bbox_to_anchor=(0.5, -0.3), loc='upper center', ncol=3)
+
+    cb = f.colorbar(cm.ScalarMappable(norm, cmap="coolwarm"), ax=axs[:,2], shrink=0.3, extend="both")
+    cb.ax.set_title('log10[Kh_eff]', fontsize = 'small', pad=10)
+    plt.show()
+    # axs[1].
+    # axs[2].
+    pass
+
 def plot_transient_time_evolutions(name, realizations):
 
     com, toe, mix, fresh, wel = proc.load_transient_metric_evolutions(name)
@@ -511,6 +663,7 @@ def plot_well_ensemble(name, realizations):
     for i in range(len(realizations)):
         axs[i].plot(t, wel_mean[i], c=c[i], lw=2, label=f'{realizations[i]} mean')
         axs[i].plot(t, wel[i].T, c=c[i], alpha = 0.2, lw=0.5)
+        axs[i].axhline(0.35, c='k', alpha=0.5, zorder = -1, linestyle=':', label="Potable maximum")
 
     axs[1].set_ylabel("salinity (kg/m^3)")
     axs[2].set_xlabel("time (days)")
@@ -520,6 +673,45 @@ def plot_well_ensemble(name, realizations):
     plt.suptitle("Well salinity under constant pumping")
     plt.show()
         
+def plot_effective_conductivities(Kh, Kv):
+
+    f, axs = plt.subplots(1, 3, constrained_layout=True, sharey=True)
+    axs[0].boxplot([Kh, Kv], labels=["Kh_eff", "Kv_eff"], vert=True)
+    axs[0].set_yscale("log")
+    axs[1].plot(range(len(Kh)), np.array([Kh, Kv]).T)
+    axs[1].set_yscale("log")
+    axs[1].legend(labels=["Kh_eff", "Kv_eff"])
+    f.suptitle("Effective conductivities across all rows")
+    axs[0].set_ylabel("Conductivity (log[m/day])")
+    axs[1].set_xlabel("Row number")
+    axs[2].set_yscale("log")
+    scat = axs[2].scatter(Kv, Kh, c=range(len(Kh)))
+    scatcb = plt.colorbar(scat, ax=axs[2])
+    scatcb.ax.set_title("row")
+    axs[2].set_xlabel("Kv_eff")
+
+    plt.show()
+
+def compare_wel_salinity_with_effective_conductivity(Kh, Kv, wel, realizations=["heterogeneous"]):
+    
+    f, axs = plt.subplots(1,2, constrained_layout=True, sharey=True)
+    colors = ["r", "b", "g"]
+
+    for i in range(len(realizations)):
+        axs[0].scatter(Kh, wel[i, :], color=colors[i])
+        axs[1].scatter(Kv, wel[i, :], color=colors[i], label=realizations[i])
+
+    axs[0].set_xscale("log")
+    axs[1].set_xscale("log")
+    axs[0].set_yscale("log")
+    axs[1].set_yscale("log")
+    axs[0].set_ylabel("salinity (log[kg/m^3])")
+    axs[0].set_xlabel("Kh_eff (log[m/day])")
+    axs[1].set_xlabel("Kv_eff (log[m/day])")
+    axs[1].legend(bbox_to_anchor=(1.04, 0.5), loc='center left')
+    f.suptitle("Effective conducitivities vs well salinity")
+
+    plt.show()
 
 if __name__=="__main__":
     results("pirot2D_check_k_eff")
