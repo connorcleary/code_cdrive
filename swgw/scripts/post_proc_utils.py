@@ -29,7 +29,6 @@ def find_fresh_water_volume(concentration, delV, colq):
                     fresh += 1
     return fresh*5
 
-
 def find_toe_penetration(conc):
     for i in range(conc.shape[1]):
         if conc[-1][i] > 0.5:
@@ -65,7 +64,6 @@ def plot_conc(ax, swt, results_dict, row=0, **kwargs):
     # ax.set_title("Simulated Concentrations")
 
     return ax, arr
-
 
 def plot_head(ax, swt, results_dict, row=0, **kwargs):
 
@@ -139,7 +137,6 @@ def extract_results(swt, nstp, pump=False, rec=False):
 
     return concentration, qx, qy, qz, head
 
-
 def save_results(swt, realization, concentration, qx, qy, qz, head):
 
     ws = os.path.join(f'.\\results\\{swt._BaseModel__name}')
@@ -195,19 +192,32 @@ def load_time_evolution_3D(modelname, realization, stress_period=None):
     ws = os.path.join(f'.\\results\\{modelname}')
 
     with open(os.path.join(ws, f"concentration_time_evolution_{realization}{stress_period}.npy"), 'rb') as f: evol = np.load(f, allow_pickle=True)
-
-    return evol
+    with open(os.path.join(ws, f"qx_time_evolution_{realization}{stress_period}.npy"), 'rb') as f: evolx = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qz_time_evolution_{realization}{stress_period}.npy"), 'rb') as f: evolz = np.load(f, allow_pickle=True)
+    return evol, evolx, evolz
 
 def get_time_evolution(swt, nstp, steady=False):
 
-    ws = swt._model_ws
-    ucnobj = bf.UcnFile(os.path.join(ws, "MT3D001.UCN"), model=swt)
+    if swt.name.__contains__("\\"):
+        ws = "\\".join([part for part in swt.name.split("\\")[:-1]])
+        name = swt.name.split("\\")[-1]
+    else:
+        ws = swt.model_ws
+        name = swt.name
+
+    ucnobj = bf.UcnFile(os.path.join(ws, "MT3D001.UCN"))
     times = ucnobj.get_times()
-    cbbobj = bf.CellBudgetFile(os.path.join(ws, f'{swt._BaseModel__name}.cbc'))
-    headobj = bf.HeadFile(os.path.join(ws, f'{swt._BaseModel__name}.hds'))
+    cbbobj = bf.CellBudgetFile(os.path.join(ws, f'{name}.cbc'))
+    headobj = bf.HeadFile(os.path.join(ws, f'{name}.hds'))
     delV = -1*swt.dis.delc[0]*swt.dis.delr[0]*swt.dis.botm.array[0][0][0]
     
     concentration_data = ucnobj.get_alldata()[:]
+    qx = np.zeros_like(concentration_data)
+    qz = np.zeros_like(concentration_data)
+    for i in range(qx.shape[0]):
+        qx[i] = cbbobj.get_data(text="flow right face", totim=times[-1])[0]
+        qz[i] = cbbobj.get_data(text="flow lower face", totim=times[-1])[0]
+
     # budget_data = cbbobj.get_alldata()[15:]
     # head_data = headobj.get_alldata()[15:]
     # if not steady:
@@ -219,11 +229,13 @@ def get_time_evolution(swt, nstp, steady=False):
     # mixing_zone_evolution =  list(map(proc_functions.mixing_zone_volume, concentration_data, 2*nstp*[delV]))
     # fresh_volume_evolution = list(map(proc_functions.fresh_water_volume, concentration_data, 2*nstp*[delV], nstp*2*[15]))
     
-    return concentration_data
+    return concentration_data, qx, qz
 
-def save_concentration_time_evolution(modelname, realization, concentration_time_evolution, stress_period=None):
+def save_concentration_time_evolution(modelname, realization, concentration_time_evolution, qx, qz, stress_period=None):
     ws = os.path.join(f'.\\results\\{modelname}')
     with open(os.path.join(ws, f"concentration_time_evolution_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(concentration_time_evolution))
+    with open(os.path.join(ws, f"qx_time_evolution_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(qx))
+    with open(os.path.join(ws, f"qz_time_evolution_{realization}{stress_period}.npy"), 'wb') as f: np.save(f, np.array(qz))
 
 def compare_time_evolutions(times, arrays, realizations, metrics, colors, modelname):
     '''
@@ -294,14 +306,18 @@ def probability_of_salinization(conc1, conc2):
     heatmap = heatmap/conc1.shape[1]
     return heatmap
 
-def get_steady_state_time_evolutions(name, realizations, rows):
+def get_steady_state_time_evolutions(name, realizations, rows, dim=2):
 
     concentration = [[] for i in range(len(realizations))]
     
-    for i, realization in enumerate(realizations):
-        for j in range(rows):
-            concentration[i].append(load_time_evolution_3D(name, f"row{j}{realization}","steady"))
-
+    i = 0
+    j = rows - 1
+    if dim == 2:
+        for i, realization in enumerate(realizations):
+            for j in range(rows):
+                concentration[i].append(load_time_evolution_3D(name, f"row{j}{realization}","steady"))
+    else:
+        concentration[0] = load_time_evolution_3D(name, f"{realizations[0]}","steady")
     # com = np.zeros((i+1, j+1, int(0.05*len(concentration[0][0])))) 
     # toe = np.zeros((i+1, j+1, int(0.05*len(concentration[0][0]))))
     # mix = np.zeros((i+1, j+1, int(0.05*len(concentration[0][0]))))
@@ -312,9 +328,17 @@ def get_steady_state_time_evolutions(name, realizations, rows):
     for i in range(len(realizations)):
         for j in range(rows):
             for kdx, k in enumerate(np.logspace(0, 3.56, base=10, num=30).astype(int)):
-                com[i, j, kdx] = find_mixing_com(concentration[i][j][k][:,0,:], 800)
-                toe[i, j, kdx] = find_toe_penetration(concentration[i][j][k][:,0,:])
-                mix[i, j, kdx] = find_mixing_zone(concentration[i][j][k][:,0,:])
+                if dim == 2:
+                    row = 0
+                    com[i, j, kdx] = find_mixing_com(concentration[i][j][k][:,row,:], 800)
+                    toe[i, j, kdx] = find_toe_penetration(concentration[i][j][k][:,row,:])
+                    mix[i, j, kdx] = find_mixing_zone(concentration[i][j][k][:,row,:])
+
+                else:
+                    row = j
+                    com[i, j, kdx] = find_mixing_com(concentration[0][i][k][:,row,:], 800)
+                    toe[i, j, kdx] = find_toe_penetration(concentration[0][i][k][:,row,:])
+                    mix[i, j, kdx] = find_mixing_zone(concentration[0][i][k][:,row,:])
 
     results_location = f'.\\results\\{name}'
     np.save(f"{results_location}\\com_evolution_log", com)

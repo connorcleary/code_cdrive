@@ -858,7 +858,7 @@ def cam_steady(modelname, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, nstp, onshor
             chd_sp1.append([cell[0], cell[1], cell[2], head, head])
         else:
             ssm_sp1.append([cell[0], cell[1], cell[2], 0.0, itype["WEL"]])
-            wel_sp1.append([cell[0], cell[1], cell[2], qinflow / nlay])
+            wel_sp1.append([cell[0], cell[1], cell[2], qinflow / (nlay*nrow)])
 
     for cell in offshore_boundary_cells:
         ssm_sp1.append([cell[0], cell[1], cell[2], 35.0, itype["BAS6"]])
@@ -873,8 +873,8 @@ def cam_steady(modelname, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, nstp, onshor
 
     chd = flopy.modflow.ModflowChd(swt, stress_period_data=chd_data, ipakcb = ipakcb)
 
-    sconc = np.zeros((nlay, nrow, ncol))
-    for col in range(int(ncol*onshore_proportion), ncol):
+    sconc = 0.0*np.ones((nlay, nrow, ncol))
+    for col in range(int(ncol-1), ncol): #range(int(ncol*onshore_proportion), ncol):
         for row in range(nrow): 
             for lay in range(nlay):
                 sconc[lay, row, col] = 35.0

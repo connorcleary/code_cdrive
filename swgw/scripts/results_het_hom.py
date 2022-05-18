@@ -1,12 +1,14 @@
+from ctypes import c_ssize_t
+from lib2to3.pgen2.pgen import DFAState
 import matplotlib.pyplot as plt
 import numpy as np 
 import flopy
 from pyrsistent import v
+from zmq import TCP_MAXRT
 import post_proc_utils as proc
 import matplotlib.cm as cm
-
-def single_results(modelname):
-    pass
+import plot_helpers as plth
+from matplotlib.gridspec import GridSpec
 
 def results(modelname):
 
@@ -247,6 +249,141 @@ def compare_transient_response(name, realizations, hks, row, qlay, qcol):
     
     plt.savefig(f"{results_location}\\transient_comparison_row{row}.png", dpi=300)
 
+def compare_steady_states_2D_3D(name2D, name3D, realizations, hk, row):
+
+    f, axs = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(6, 7), constrained_layout=True)
+
+    x = np.linspace(-400, 400, 80)
+    y = np.linspace(-25, 0, 50)
+
+    qx2D, _, qz2D, _, concentration2D =  proc.load_results_3D(name2D, f"row{row}{realizations[0]}", stress_period="steady")
+    qx3D, _, qz3D, _, concentration3D =  proc.load_results_3D(name3D, realizations[1], stress_period="steady")
+
+    cmhk = axs[0].pcolormesh(x, y, np.flipud(np.log(hk[:,row,:])), cmap="coolwarm", vmax=-1, vmin=-13, )
+    cm2D = axs[1].pcolormesh(x, y, np.flipud(concentration2D[:,0,:]), cmap="viridis", vmax=35, vmin=0)
+    cm3D = axs[2].pcolormesh(x, y, np.flipud(concentration3D[:,row,:]), cmap="viridis", vmax=35, vmin=0)
+    axs[1].quiver(plth.sample_grid_data(x, 3, 3), plth.sample_grid_data(y, 3, 3), 
+                    plth.sample_grid_data(np.flipud(qx2D[:,0,:]), 3,3), -plth.sample_grid_data(np.flipud(qz2D[:,0,:]), 3,3), color="white")
+    axs[2].quiver(plth.sample_grid_data(x, 3, 3), plth.sample_grid_data(y, 3, 3), 
+                    plth.sample_grid_data(np.flipud(qx3D[:,row,:]), 3,3), -plth.sample_grid_data(np.flipud(qz3D[:,row,:]), 3,3), color="white")
+
+    axs[0].set_title("Horizontal hydraulic conductivity")
+    axs[1].set_title("2D aquifer model")
+    axs[2].set_title("3D aquifer model")
+    f.suptitle(f"Concentration in row {row}", fontsize=16)
+    axs[1].set_ylabel("Depth (m)")
+    axs[2].set_xlabel("Distance offshore (m)")
+
+    cb1 = plt.colorbar(cmhk,ax=axs[0], location="right", shrink=0.75, pad=0.02)
+    cb2 = plt.colorbar(cm2D,ax=axs[1:], location="right", shrink=0.75/2, pad=0.02)
+
+    cb1.ax.set_title('log10[hk]', fontsize = 'small')
+    cb2.ax.set_title('C (kg/m^3)', fontsize = 'small')
+
+    for ax in axs[:]: ax.set_aspect(10)
+
+    #plt.show()
+
+    results_location = f'.\\results\\{name3D}'
+    plt.savefig(f"{results_location}\\steady2Dvs3Drow{row}", dpi=300)
+
+def steady_states_gridspec_evolution3D(name3D, realization, hk, row):
+    
+    f = plt.figure(constrained_layout=True, figsize=(7,7))
+    gs = GridSpec(4, 2, figure=f, width_ratios=[1,2])
+
+    axleg = f.add_subplot(gs[0, 0])
+    axtime = f.add_subplot(gs[1:, 0])
+    axhk = f.add_subplot(gs[0, 1])
+    axmax = f.add_subplot(gs[1, 1])
+    axmin = f.add_subplot(gs[2, 1])
+    axss = f.add_subplot(gs[3, 1])
+
+    axhk.set_aspect(10)
+    axmax.set_aspect(10)
+    axmin.set_aspect(10)
+    axss.set_aspect(10)
+
+    t = 1/365*1e6*np.logspace(0, 3.56, base=10, num=30).astype(int)
+    # load time evolutions
+    com, toe, mix = proc.load_steady_metric_evolutions(name3D)
+    concentration, qx, qz = proc.load_time_evolution_3D(name3D, realization,"steady")
+
+    imax = np.atleast_1d(np.argmax(com[0,row,:]))[0]
+    imin = np.atleast_1d(np.argmin(com[0,row,imax:]))[0] + imax
+    iss = com.shape[-1] -1
+    for i in range(com[0, row, imin:].shape[0]):
+        if np.average(np.absolute(concentration[i+imin,:,:,:]-concentration[i+imin-1,:,:,:])) < 0.05:
+            iss = i + imin
+            break
+    imax = 13
+
+
+    nmax = int(t[imax]//(1e6/365))
+    nmin = int(t[imin]//(1e6/365))
+    nss = int(t[iss]//(1e6/365))
+
+    cmax = concentration[nmax,:,:,:]
+    cmin = concentration[nmin,:,:,:] 
+    css = concentration[nss,:,:,:]
+    qxmax = qx[nmax,:,:,:]
+    qxmin = qx[nmin,:,:,:] 
+    qxss  = qx[nss,:,:,:]
+    qzmax  = qz[nmax,:,:,:]
+    qzmin  = qz[nmin,:,:,:]
+    qzss = qz[nss,:,:,:]
+
+    x = np.linspace(-400, 400, 80)
+    y = np.linspace(-25, 0, 50)
+
+    cmhk = axhk.pcolormesh(x, y, np.flipud(np.log(hk[:,row,:])), cmap="coolwarm", vmax=-1, vmin=-13)
+    cmmax = axmax.pcolormesh(x, y, np.flipud(cmax[:,row,:]), cmap="viridis", vmax=35, vmin=0)
+    cmmin = axmin.pcolormesh(x, y, np.flipud(cmin[:,row,:]), cmap="viridis", vmax=35, vmin=0)
+    cmss = axss.pcolormesh(x, y, np.flipud(css[:,row,:]), cmap="viridis", vmax=35, vmin=0)
+
+    axmax.quiver(plth.sample_grid_data(x, 3, 3), plth.sample_grid_data(y, 3, 3), 
+                    plth.sample_grid_data(np.flipud(qxmax[:,0,:]), 3,3), -plth.sample_grid_data(np.flipud(qzmax[:,0,:]), 3,3), color="white")
+    axmin.quiver(plth.sample_grid_data(x, 3, 3), plth.sample_grid_data(y, 3, 3), 
+                    plth.sample_grid_data(np.flipud(qxmin[:,row,:]), 3,3), -plth.sample_grid_data(np.flipud(qzmin[:,row,:]), 3,3), color="white")
+    axss.quiver(plth.sample_grid_data(x, 3, 3), plth.sample_grid_data(y, 3, 3), 
+                    plth.sample_grid_data(np.flipud(qxss[:,row,:]), 3,3), -plth.sample_grid_data(np.flipud(qzss[:,row,:]), 3,3), color="white")
+
+    
+    axtime.invert_yaxis()
+    axtime.plot(com[0,row,:], t)
+    axtime.axhline(y=t[imax], color = "red", linestyle=(0,(1,2)), label="maximum")
+    axtime.axhline(y=t[imin], color = "blue", linestyle=(1,(1,2)), label="minimum")
+    axtime.axhline(y=t[iss], color = "green", linestyle=(2,(1,2)), label="steady")
+
+    axtime.set_yscale('log')
+
+    axhk.set_title("Horizontal hydraulic conductivity")
+    axmax.set_title("Maximum distance offshore")
+    axmin.set_title("Minimum distance offshore")
+    axss.set_title("Steady state")
+    axtime.set_title("Time evolution")
+
+    axmin.set_ylabel("Depth (m)")
+    axss.set_xlabel("Distance offshore (m)")
+    axtime.set_xlabel("Distance offshore (m)")
+    axtime.set_ylabel("time (log[years])", labelpad=10, rotation=270)
+
+    h, l = axtime.get_legend_handles_labels()
+    axleg.axis("off")
+    axleg.legend(h, l, loc="lower center", borderaxespad=0)
+
+    f.suptitle("Saline concentrations at different states")
+
+    cb1 = plt.colorbar(cmhk,ax=axhk, location="right", shrink=0.75, pad=0.05)
+    cb2 = plt.colorbar(cmmax,ax=[axmax, axmin, axss], location="right", shrink=0.75/3, pad=0.05)
+
+    cb1.ax.set_title('log10[hk]', fontsize = 'small')
+    cb2.ax.set_title('C (kg/m^3)', fontsize = 'small')
+
+    results_location = f'.\\results\\{name3D}'
+    plt.savefig(f"{results_location}\\steady3D_evolution{row}", dpi=300)
+    
+
 def probability_of_saline(modelname):
     """
         For 3D
@@ -319,7 +456,8 @@ def plot_metric_over_layers(modelname, metric, realizations, title):
         axs[i].axhline(y=-qlay*delL, color = "red", linestyle=":", label="well layer")
         axs[i].set_title(realization)
 
-    axs[i].legend(bbox_to_anchor=(1.04, 0.5), loc='center left')
+    
+    axs[i].legend(loc='center left')
     plt.show()
 
 def plot_metric_as_heatmap_layered(modelname, metric, realizations, title):
@@ -436,6 +574,63 @@ def compute_steadystate_statistics(name, realizations, rows):
     ax.legend()
     plt.show()
 
+def steady_boxplots_2D_vs_3D(name2D, name3D, realizations, rows):
+
+    if type(rows) is int:
+        n = rows
+    else:
+        n = len(rows)
+
+    m = len(realizations)
+    toe_position = np.zeros((2, m, n))
+    mixing_area = np.zeros((2, m, n))
+    centre_of_mass = np.zeros((2, m, n))
+    fresh_sgd_flux = np.zeros((2, m, n))
+
+    for i, model in enumerate([name2D, name3D]):
+        for j, realization in enumerate(realizations):
+            if i == 0:
+                realization_name = f"pirot_basic{realization}"
+                _, _, qz, _, concentration = proc.load_results_3D(model, realization_name, stress_period="steady")
+            for k in range(rows):
+                if i == 1:
+                    realization_name = f"row{k}{realization}"
+                    row = 0
+                    
+                    _, _, qz, _, concentration = proc.load_results_3D(model, realization_name, stress_period="steady")
+                else:
+                    row = k 
+                
+                toe_position[i, j, k] = proc.find_toe_penetration(concentration[:,row,:])
+                mixing_area[i, j, k] = proc.find_mixing_zone(concentration[:,row,:])
+                centre_of_mass[i, j, k] = proc.find_mixing_com(concentration[:,row,:], 800)
+                fresh_sgd_flux[i, j, k] = proc.find_sgd(concentration[:,row,:], qz[:,row,:], 0.5)
+            
+    f, axs = plt.subplots(4, 1, sharex=True, constrained_layout=True)
+
+    for i, (metric, name, unit) in enumerate(zip([toe_position, mixing_area, centre_of_mass, fresh_sgd_flux], \
+                                ['toe_position', 'mixing_area', 'centre_of_mass_position', 'fresh_sgd_flux'],\
+                                ['distance onshore (m)', 'area (m^2)', 'distance offshore (m)', 'flux (m^3/day)'])):
+
+        bp3D = axs[i].boxplot([metric[0, 0, :], metric[0, 1, :], metric[0, 2, :]], positions=np.array(range(len(realizations)))*2.0-0.4, sym='', widths=0.6)
+        bp2D = axs[i].boxplot([metric[1, 0, :], metric[1, 1, :], metric[1, 2, :]], positions=np.array(range(len(realizations)))*2.0+0.4, sym='', widths=0.6)
+        plth.set_box_color(bp3D, "b")
+        plth.set_box_color(bp2D, "r")
+
+        axs[i].set_title(name)
+        axs[i].set_ylabel(unit)
+
+    realizations[0] = "heterogenous"
+
+    axs[i].set_xticks(range(0, len(realizations) * 2, 2), realizations)
+    axs[i].set_xlim(-2, len(realizations)*2)
+
+    axs[1].plot([], c='b', label='3D model')
+    axs[1].plot([], c='r', label='2D ensemble')
+    axs[1].legend(bbox_to_anchor=(1.04, 0.5), loc='center left')
+
+    plt.show()
+
 def transient_box_plots(name, realizations, rows, qcol, qlay):
     n = len(rows)
     m = len(realizations)
@@ -456,11 +651,6 @@ def transient_box_plots(name, realizations, rows, qcol, qlay):
             fresh_sgd_flux[i, row] = proc.find_sgd(concentration.item().get('pumping')[:,0,:], qz.item().get('pumping')[:,0,:], 0.5)
             fresh[i, row] = proc.find_fresh_water_volume(concentration.item().get('pumping')[:,0,:], 5, qcol)
             wel[i, row] = concentration.item().get('pumping')[qlay,0,qcol]
-
-    # for i in range(len(realizations)):
-    #     for metric, name in zip([toe_position, mixing_area, centre_of_mass, fresh_sgd_flux], ['toe_position', 'mixing_area', 'centre_of_mass', 'fresh_sgd_flux']):
-    #         print(f"mean of {name} for realization {realizations[i]}: {np.mean(metric[i, :])}")
-    #         print(f"std of {name} for realization {realizations[i]}: {np.std(metric[i, :])}")
 
     for metric, name, unit in zip([toe_position, mixing_area, centre_of_mass, fresh_sgd_flux, fresh, wel], \
                                 ['toe position', 'mixing area', 'mixing centre of mass position', 'fresh sgd flux', "freshwater volume", "well salinity"],\
@@ -592,6 +782,93 @@ def plot_steady_time_evolution_ensemble(name, realizations="heterogenous", hk=No
     axs[2][1].legend(bbox_to_anchor=(0.5, -0.3), loc='upper center', ncol=3)
 
     cb = f.colorbar(cm.ScalarMappable(norm, cmap="coolwarm"), ax=axs[:,2], shrink=0.3, extend="both")
+    cb.ax.set_title('log10[Kh_eff]', fontsize = 'small', pad=10)
+    plt.show()
+    # axs[1].
+    # axs[2].
+    pass
+
+def plot_steady_time_evolution_ensemble_2D_vs_3D(name2D, name3D, realizations="heterogenous", hk=None):
+
+    # colors = plt.cm.jet(np.linspace(0,1,40))
+    # colors = np.concatenate((colors, colors, colors, colors))
+    norm = plt.Normalize()
+    colors = plt.cm.coolwarm(norm(np.log10(hk)))
+
+    com, toe, mix = proc.load_steady_metric_evolutions(name2D)
+    com_3D, toe_3D, mix_3D = proc.load_steady_metric_evolutions(name3D)
+    com = np.concatenate([[com[0,:,:]], com_3D])
+    toe = np.concatenate([[toe[0,:,:]], toe_3D])
+    mix = np.concatenate([[mix[0,:,:]], mix_3D])
+
+    com_mean = np.mean(com, axis=1)
+    com_median = np.median(com, axis=1)
+    com_lower = np.percentile(com, 25, axis = 1)
+    com_upper = np.percentile(com, 75, axis = 1)
+    toe_mean = np.mean(toe, axis=1)
+    toe_median = np.median(toe, axis=1)
+    toe_lower = np.percentile(toe, 25, axis = 1)
+    toe_upper = np.percentile(toe, 75, axis = 1)
+    mix_mean = np.mean(mix, axis=1)
+    mix_median = np.median(mix, axis=1)
+    mix_lower = np.percentile(mix, 25, axis = 1)
+    mix_upper = np.percentile(mix, 75, axis = 1)
+    
+    c = ["r", "b", "g"]
+    f, axs = plt.subplots(3, len(realizations), sharex=True, sharey="row", constrained_layout=True)
+    t = 1/365*1e6*np.logspace(0, 3.56, base=10, num=30).astype(int)
+
+    commin = np.min(com_3D.flatten()) -10
+    commax = np.max(com_3D.flatten()) +10
+    toemin = np.min(toe.flatten()) -50
+    toemax = np.max(toe.flatten()) +50
+    mixmin = np.min(mix.flatten()) -50
+    mixmax = np.max(mix.flatten()) +50
+
+    for real in range(len(realizations)):
+
+        axs[0][real].set_xscale('log')
+        axs[1][real].set_xscale('log')
+        axs[2][real].set_xscale('log')
+
+        axs[0][real].set_ylim(commin, commax)
+        axs[1][real].set_ylim(toemin, toemax)
+        axs[2][real].set_ylim(mixmin, mixmax)
+
+        i = 0
+        for j in range(40):
+            axs[0][real].plot(t, com[real,j,:].T, c=colors[j], alpha=1, linewidth=0.35)
+            axs[1][real].plot(t, toe[real,j,:].T, c=colors[j], label="_nolegend_", alpha=1, linewidth=0.35)
+            axs[2][real].plot(t, mix[real,j,:].T, c=colors[j],label="_nolegend_", alpha=1, linewidth=0.35)
+
+        axs[0][real].plot(t, com_mean[real], c=c[2])
+        axs[1][real].plot(t, toe_mean[real], c=c[2], label= f"{realizations[real]} mean")
+        axs[2][real].plot(t, mix_mean[real], c=c[2], label= f"ensemble mean")
+        axs[0][real].plot(t, com_median[real], c=c[2], linestyle=":")
+        axs[1][real].plot(t, toe_median[real], c=c[2], linestyle=":", label= f"{realizations[real]} median")
+        axs[2][real].plot(t, mix_median[real], c=c[2], linestyle=":", label= f"ensemble median")
+
+        axs[2][real].set_xlabel("log(years)")
+
+    axs[0][0].set_ylabel("distance offshore (m)")
+    axs[1][0].set_ylabel("distance onshore (m)")
+    axs[2][0].set_ylabel("area (m^2)")
+
+    # axs[0][1].set_title("Centre of mass of mixing zone")
+    # axs[1][1].set_title("Toe position")
+    # axs[2][1].set_title("Area of mixing zone")
+
+    axs[0][0].set_title("2D")
+    axs[0][1].set_title("3D")
+
+    for ax, row in zip(axs[:,0], ["Centre of mass of mixing zone", "Toe position", "Area of mixing zone"]):
+        ax.annotate(row, xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - 5, 0),
+                xycoords=ax.yaxis.label, textcoords='offset points',
+                size='large', ha='right', va='center',rotation=90)
+
+    axs[2][1].legend(bbox_to_anchor=(0.5, -0.3), loc='upper center', ncol=3)
+
+    cb = f.colorbar(cm.ScalarMappable(norm, cmap="coolwarm"), ax=axs[:,1], shrink=0.3, extend="both")
     cb.ax.set_title('log10[Kh_eff]', fontsize = 'small', pad=10)
     plt.show()
     # axs[1].

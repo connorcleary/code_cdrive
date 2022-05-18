@@ -89,17 +89,19 @@ def run_entire_model(name):
 
     proc.compare_time_evolutions(np.linspace(0, pumpT+recT, nstp*2), [[het_mix, hom_mix], [het_fresh, hom_fresh], [het_wel, hom_wel]], ["heterogenous", "homogenous"], ["Mixing zone volume", "Freshwater volume", "Well salinity"], ["green", "blue", "red"], name)
 
-def run_steady(name, k_type, realization, hk, vka, qinflow=None):  
+def run_steady(name, k_type, realization, hk, vka, qinflow=None): 
     swt = coastal.cam_steady(name, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, int(perlen/dt) ,onshore_proportion, k_type, head=head, qinflow=qinflow)
     swt.lpf.hk = hk
     swt.lpf.vka = vka
-    run_model(swt)
+    # run_model(swt)
 
-    # concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=False, rec=False)
-    # proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "steady", name)
+    concentration, qx, qy, qz, head_array = proc.extract_results(swt, nstp, pump=False, rec=False)
+    proc.save_results_3D(swt, realization, concentration, qx, qy, qz, head_array, "steady", name)
 
-    concentration_data = proc.get_time_evolution(swt, nstp, steady=True)
-    proc.save_concentration_time_evolution(name, realization, concentration_data, stress_period="steady")
+    concentration_data, qx_data, qz_data = proc.get_time_evolution(swt, nstp, steady=True)
+    proc.save_concentration_time_evolution(name, realization, concentration_data, qx_data, qz_data, stress_period="steady")
+
+
 
 def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, qinflow=None):
     swt = coastal.cam_transient(name, Lz, Lx, Ly, nlay, nrow, ncol, pumpT, recT, pumpT/1000, onshore_proportion, k_type, q, qlay, qrow, qcol, recQmult, start_head, start_conc, head=head, qinflow=qinflow)
@@ -283,8 +285,8 @@ def run_all_3D_realizations(name):
     concentration_steady = np.zeros((nlay, rows, ncol))
     concentration_transient = np.zeros((nlay, rows, ncol))
 
-    realization = f"pirot_basic"
-    # run_steady(name, "heterogenous", realization, hk_all, vka_all)
+    realization = f"pirot_basic_all_fresh"
+    run_steady(name, "heterogenous", realization, hk_all, vka_all)
     qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization, stress_period="steady")
     Kv_eff, Kh_eff, qinflow_bad = k_eff.calculate_K_eff(name, hk_all, vka_all, Lx, Ly, Lz, head, 0)
     _, qinflow_steady = calc_qinflow(qx, qz)
@@ -293,14 +295,13 @@ def run_all_3D_realizations(name):
     # _, qinflow_pumping = calc_qinflow(qx.item().get('pumping'), qz.item().get('pumping'))
     # _, qinflow_recovery = calc_qinflow(qx.item().get('recovery'), qz.item().get('recovery'))
 
-    run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
+    # run_steady(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff)
     # qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_head", stress_period="steady")
     # run_transient(name, "heterogenous", realization+"equivalent_head", Kh_eff, Kv_eff, concentration, head_steady, qinflow=None)
     
-    run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow_steady)
+    # run_steady(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, qinflow=qinflow_steady)
     # qx, qy, qz, head_steady, concentration =  proc.load_results_3D(name, realization+"equivalent_flux", stress_period="steady")
     # run_transient(name, "homogenous", realization+"equivalent_flux", Kh_eff, Kv_eff, concentration, head_steady, qinflow=[qinflow_pumping, qinflow_recovery])
-
 
 def analyse_2D_steady_state():
     realization_suffices = ["", "equivalent_flux", "equivalent_head"]
@@ -376,14 +377,57 @@ def compare_steady_evolutions_with_hk():
         
     results.plot_steady_time_evolution_ensemble(name, realizations=["heterogenous", "equivalent_flux", "equivalent_head"], hk=Kh_all)
 
+def compare_3D_2D_steady_evolutions_with_hk():
+    name = "2D_ergodic_0.5"
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+    vka_all = np.transpose(Kv, (2, 0, 1))
+    rows = hk_all.shape[1]
+
+    Kh_all = np.zeros(rows)
+
+    for row in range(rows):
+        _, Kh_all[row], _ = k_eff.calculate_K_eff(name, hk_all[:,row,:], vka_all[:,row,:], Lx, Ly, Lz, head, 0)
+        
+    results.plot_steady_time_evolution_ensemble_2D_vs_3D("2D_ergodic_0.5" ,"3D_0.5", realizations=["2D", "3D",], hk=Kh_all)
+
+def compare_3D_2D_steady_crosssections():
+    name2D = "2D_ergodic_0.5"
+    name3D = "3D_0.5"
+    realizations = ["", "pirot_basic"]
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+
+    for row in range(40):
+        results.compare_steady_states_2D_3D(name2D, name3D, realizations, hk_all, row)
+
+def compare3D_time_evolution():
+    name = "3D_0.5_fresh"
+    swt = flopy.seawat.swt.Seawat.load(f'.\\model_files\\{name}\{name}_steady.nam',  exe_name=r"C:\Users\ccl124\bin\swt_v4x64.exe")
+    # concentration_time_evolution, qx, qz = proc.get_time_evolution(swt, nstp, steady=True)
+    # proc.save_concentration_time_evolution(name, "pirot_basic_all_fresh", concentration_time_evolution, qx, qz, stress_period="steady")
+    proc.get_steady_state_time_evolutions(name, ["pirot_basic_all_fresh"], 40, 3)
+    Kh, Kv = load_field()
+    hk_all = np.transpose(Kh, (2, 0, 1))
+
+    for row in range(40):
+        results.steady_states_gridspec_evolution3D(name, "pirot_basic_all_fresh", hk_all, row)
+
 def main():
     # compare_steady_states_2D()
     # run_all_2D_realizations()
     # analyse_2D_steady_state()
-    name = "3D_0.5"
-    run_all_3D_realizations(name)
+    name = "3D_0.5_FRESH"
+    # run_all_3D_realizations(name)
+    Kh, Kv = load_field()
     realizations = ["", "equivalent_flux", "equivalent_head"]
-    # proc.get_steady_state_time_evolutions(name, realizations, 40)
+    realizations= ["pirot_basic"]
+    
+    compare3D_time_evolution()
+    #compare_3D_2D_steady_evolutions_with_hk()
+    #compare_3D_2D_steady_crosssections()
+    # results.steady_boxplots_2D_vs_3D("3D_0.5", "2D_ergodic_0.5", realizations, 40)
+    ## proc.get_steady_state_time_evolutions(name, realizations, 40, 3)
 
     # results.plot_steady_time_evolutions(name, realizations)
     # results.plot_steady_time_evolution_ensemble(name)
