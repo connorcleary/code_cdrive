@@ -821,7 +821,7 @@ def cam_steady(modelname, Lz, Lx, Ly, nlay, nrow, ncol, perlen, dt, nstp, onshor
     laywet[0] = 1
 
     lpf = flopy.modflow.ModflowLpf(swt, hk=0, vka=0, ipakcb=ipakcb, laytyp=laytyp, laywet=laywet)
-    pcg = flopy.modflow.ModflowPcg(swt, hclose=1.0e-5, npcond=0, mxiter=500)
+    pcg = flopy.modflow.ModflowPcg(swt, hclose=1.0e-5, npcond=1, mxiter=500)
 
     oc_spd = {} 
     for kstp in range(nstp):

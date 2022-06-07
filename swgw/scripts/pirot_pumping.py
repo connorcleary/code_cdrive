@@ -28,7 +28,6 @@ qrow = 0
 qlay = 15
 qcol = 15
 
-
 def load_field():
     fields = loadmat(r'./fields/80x40x50aTest')
     Kh = fields['model_Kh']
@@ -100,8 +99,6 @@ def run_steady(name, k_type, realization, hk, vka, qinflow=None):
 
     concentration_data, qx_data, qz_data = proc.get_time_evolution(swt, nstp, steady=True)
     proc.save_concentration_time_evolution(name, realization, concentration_data, qx_data, qz_data, stress_period="steady")
-
-
 
 def run_transient(name, k_type, realization, hk, vka , start_conc, start_head, qinflow=None):
     swt = coastal.cam_transient(name, Lz, Lx, Ly, nlay, nrow, ncol, pumpT, recT, pumpT/1000, onshore_proportion, k_type, q, qlay, qrow, qcol, recQmult, start_head, start_conc, head=head, qinflow=qinflow)
