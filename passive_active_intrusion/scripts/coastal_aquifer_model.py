@@ -2,6 +2,7 @@ import numpy as np
 import flopy
 import os
 import pickle
+import flopy.utils.binaryfile as bf
 
 class ModelParameters:
     """
@@ -35,34 +36,37 @@ class ModelParameters:
             exe_path: path to the seawat executable
     """
     
-    def __init__(self, name, Lx=200, Ly=1, Lz=5.5, offshore_proportion=0.025, sea_level=5, ncol=400, nrow=1, nlay=110, 
-                K=10, anis=1, sy=0.24, ss=1e-5, n=0.3, alpha_L=1, alpha_anisT=0.1, alpha_anisV=0.1, diff=8.64e-5, 
-                perlen=1e9, dt=1e6, h_b=0, W_net=0.00285, rho_f=1000, rho_s=1025, exe_path=r"C:\Users\ccl124\bin\swt_v4x64.exe"):
+    def __init__(self, name, Lx=200, Ly=1, Lz=5.5, offshore_proportion=0.025, 
+                sea_level=5, ncol=400, nrow=1, nlay=110, K=10, anis=1, sy=0.24, 
+                ss=1e-5, n=0.3, alpha_L=1, alpha_anisT=0.1, alpha_anisV=0.1, 
+                diff=8.64e-5, perlen=1e9, dt=1e6, h_b=0, W_net=0.00285,
+                rho_f=1000, rho_s=1025, exe_path=r"C:\Users\ccl124\bin\swt_v4x64.exe"):
+
         self.name=name
-        self.Lx=200 
-        self.Ly=1
-        self.Lz=5.5
-        self.offshore_proportion=0.025
-        self.sea_level=5
-        self.ncol=400
-        self.nrow=1
-        self.nlay=110 
-        self.K=10
-        self.anis=1
-        self.sy=0.24
-        self.ss=1e-5
-        self.n=0.3
-        self.alpha_L=1
-        self.alpha_anisT=0.1
-        self.alpha_anisV=0.1
-        self.diff=8.64e-5 
-        self.perlen=1e9
-        self.dt=1e6
-        self.h_b=0
-        self.W_net=0.00285
-        self.rho_f=1000
-        self.rho_s=1025
-        self.exe_path=r"C:\Users\ccl124\bin\swt_v4x64.exe"
+        self.Lx=Lx
+        self.Ly=Ly
+        self.Lz=Lz
+        self.offshore_proportion=offshore_proportion
+        self.sea_level=sea_level
+        self.ncol=ncol
+        self.nrow=nrow
+        self.nlay=nlay
+        self.K=K
+        self.anis=anis 
+        self.sy=sy
+        self.ss=ss
+        self.n=n
+        self.alpha_L=alpha_L
+        self.alpha_anisT=alpha_anisT
+        self.alpha_anisV=alpha_anisV
+        self.diff=diff
+        self.perlen=perlen
+        self.dt=dt
+        self.h_b=h_b
+        self.W_net=W_net
+        self.rho_f=rho_f
+        self.rho_s=rho_s
+        self.exe_path=exe_path
         self.save_parameters()
 
     def save_parameters(self):
@@ -84,7 +88,7 @@ class ModelParameters:
         self = pickle.load(f)
 
 
-def build_model(pars):
+def build_steady_model(pars):
     '''
         A function to build a coastal aquifer model.
 
@@ -329,13 +333,53 @@ def build_model(pars):
 def run_model(swt):
     """
         A function to run the seawat model
+
+        Inputs: 
+            swt: model object
+        Outputs:
+            None
     """
     swt.write_input()
     success, buff = swt.run_model(silent=False, report=True)
     if not success:
         raise Exception("SEAWAT did not terminate normally.")
 
+def extract_results(pars, only_final=True):
+    """
+        Open model results from binary files
+
+        Inputs:
+            swt: model object
+            only_final: flag to only save the final timestep
+        Outputs:
+            head: head matrix [nstp, nlay, nrow, ncol]
+            qx: longitudinal flux matrix [nstp, nlay, nrow, ncol]
+            qy: transverse flux matrix matrix [nstp, nlay, nrow, ncol]
+            qz: vertical flux matrix matrix [nstp, nlay, nrow, ncol]
+            concentration: concentration matrix [nstp, nlay, nrow, ncol]
+    """
+    name = pars.name
+    model_ws = f".\\model_files\\{name}"
+
+    if only_final:
+        nstp = 1
+    else:
+        nstp = int(pars.perlen/pars.dt)
+
+    head = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
+    qx = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
+    qy = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
+    qz = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
+    concentration = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
+
+    # open binary files
+    ucnobj = bf.UcnFile(os.path.join(model_ws, "MT3D001.UCN"))
+    cbbobj = bf.CellBudgetFile(os.path.join(model_ws, f'{name}.cbc'))
+    headobj = bf.HeadFile(os.path.join(model_ws, f'{name}.hds'))
+
 
 pars = ModelParameters("test")
-swt = build_model(pars)
+swt = build_steady_model(pars)
 run_model(swt)
+
+
