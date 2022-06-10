@@ -3,89 +3,7 @@ import flopy
 import os
 import pickle
 import flopy.utils.binaryfile as bf
-
-class ModelParameters:
-    """
-        Class to store model parameters
-
-        Inputs:
-            name: The name of the model/scenario/realization
-            Lx: Length of the aquifer model [m]
-            Ly: Alongshore dimension - set as 1 for the 2D case [m]
-            Lz: Depth of the model [m]
-            offshore_proportion: portion of the aquifer which is submarine 
-            sea_level: datum for sea level (gives space for water table mound) [m]
-            ncol: number of columns
-            nrow: number of rows
-            nlay: number of layers
-            K: Horizontal hydraulic conductivity [m/day]
-            anis: ratio between K and vertical hydraulic conductivity
-            sy: specific yield 
-            ss: specific storage [m^-1]
-            n: porosity
-            alpha_L: longitudinal dispersivity
-            alpha_anisT: ratio between longitunal and transverse dispersivity
-            alpha_anisV: ratio between longitudinal and vertical dispersivity
-            diff: molecular diffusion coefficient
-            perlen: simulation period length [days]
-            dt: timestep [days]
-            h_b: inland boundary head
-            W_net: recharge [m\day]
-            rho_f: fresh water density [kg/m^3]
-            rho_s: salt water density [kg/m^3]
-            exe_path: path to the seawat executable
-    """
-    
-    def __init__(self, name, Lx=200, Ly=1, Lz=5.5, offshore_proportion=0.025, 
-                sea_level=5, ncol=400, nrow=1, nlay=110, K=10, anis=1, sy=0.24, 
-                ss=1e-5, n=0.3, alpha_L=1, alpha_anisT=0.1, alpha_anisV=0.1, 
-                diff=8.64e-5, perlen=1e9, dt=1e6, h_b=0, W_net=0.00285,
-                rho_f=1000, rho_s=1025, exe_path=r"C:\Users\ccl124\bin\swt_v4x64.exe"):
-
-        self.name=name
-        self.Lx=Lx
-        self.Ly=Ly
-        self.Lz=Lz
-        self.offshore_proportion=offshore_proportion
-        self.sea_level=sea_level
-        self.ncol=ncol
-        self.nrow=nrow
-        self.nlay=nlay
-        self.K=K
-        self.anis=anis 
-        self.sy=sy
-        self.ss=ss
-        self.n=n
-        self.alpha_L=alpha_L
-        self.alpha_anisT=alpha_anisT
-        self.alpha_anisV=alpha_anisV
-        self.diff=diff
-        self.perlen=perlen
-        self.dt=dt
-        self.h_b=h_b
-        self.W_net=W_net
-        self.rho_f=rho_f
-        self.rho_s=rho_s
-        self.exe_path=exe_path
-        self.save_parameters()
-
-    def save_parameters(self):
-        """
-            Save object
-        """
-        model_ws = f".\\model_files\\{self.name}"
-        if not os.path.exists(model_ws):
-            os.makedirs(model_ws)
-
-        f = open(f"{model_ws}\\pars", 'ab')
-        pickle.dump(self, f)
-        f.close()
-
-    def load_parameters(self, name):
-
-        model_ws = f".\\model_files\\{self.name}"
-        f = open(f"{model_ws}\\pars", 'ab')
-        self = pickle.load(f)
+from pars import ModelParameters, load_parameters
 
 
 def build_steady_model(pars):
@@ -148,16 +66,16 @@ def build_steady_model(pars):
     # add inactive cells
     for i in range(int(pars.ncol*pars.offshore_proportion)):
         for j in range(pars.nrow):
-            for k in range(0, int((pars.Lz-pars.sea_level)/delv)-1):
+            for k in range(0, int((pars.Lz-pars.sea_level)/delv)):
                 inactive_cells.append([k, j, i])
         
     # add cells on ends of domain
     for k in range(pars.nlay):
         for j in range(pars.nrow):
-            if k >= (pars.Lz-pars.sea_level)/delv: # if the cell is below sea level
+            if k >= np.floor((pars.Lz-pars.sea_level)/delv): # if the cell is below sea level
                 offshore_boundary_cells.append([k, j, 0])
 
-            if k >= (pars.Lz-pars.h_b)/delv:
+            if k >= np.floor((pars.Lz-pars.sea_level-pars.h_b)/delv):
                 onshore_boundary_cells.append([k, j, pars.ncol-1])
 
     # add the seafloor
@@ -188,9 +106,9 @@ def build_steady_model(pars):
         )
 
     # define layer types and wetting, this one I'm not sure about
-    laytyp=np.zeros(pars.nlay)
+    laytyp=np.ones(pars.nlay)
     laytyp[0] = 1
-    laywet=np.zeros(pars.nlay)
+    laywet=np.ones(pars.nlay)
     laywet[0] = 1
 
     # create layer property flow package
@@ -202,7 +120,7 @@ def build_steady_model(pars):
             laytyp=laytyp, 
             laywet=laywet,
             ss=pars.ss, # not sure about these ones
-            sy=pars.sy
+            sy=pars.sy,
         )
 
     # create solver package
@@ -215,7 +133,7 @@ def build_steady_model(pars):
     
 
     oc_spd = {} 
-    for kstp in range(int(pars.perlen/pars.dt)):
+    for kstp in range(0, int(pars.perlen/pars.dt),pars.frequency):
             oc_spd[(0, kstp)] = ["save head", "save budget"]
 
     oc = flopy.modflow.ModflowOc(swt, stress_period_data=oc_spd, compact=True)
@@ -231,7 +149,7 @@ def build_steady_model(pars):
     # define onshore boundary data
     for cell in onshore_boundary_cells:
         ssm_sp1.append([cell[0], cell[1], cell[2], 0, itype["BAS6"]])
-        chd_sp1.append([cell[0], cell[1], cell[2], pars.h_b, pars.h_b])
+        chd_sp1.append([cell[0], cell[1], cell[2], pars.sea_level+pars.h_b, pars.sea_level+pars.h_b])
 
     # define offshore boundary data
     for cell in offshore_boundary_cells:
@@ -245,22 +163,34 @@ def build_steady_model(pars):
     chd = flopy.modflow.ModflowChd(
             model=swt, 
             stress_period_data=chd_data, 
-            ipakcb = ipakcb
+            ipakcb=ipakcb
         )
 
+    # define recharge values
+    # rech = {}
+    # rech_sp1 = []
+    # # rech_spd = np.zeros((pars.nrow, pars.ncol))
+    # # rech_spd[:, int(pars.ncol*pars.offshore_proportion):] = pars.W_net*np.ones((pars.nrow, int(pars.ncol-pars.ncol*pars.offshore_proportion)))
+
+    # for j in range(pars.nrow):
+    #     for i in range(int(pars.ncol*pars.offshore_proportion), ncol):
+
+
+    # rech[0] = rech_sp1
     # create recharge package
     rch = flopy.modflow.ModflowRch(
             model=swt,
-            rech=pars.W_net
+            rech=pars.W_net, #rech,
+            ipakcb=ipakcb
         )
 
     # set starting concentrations
-    sconc = 35*np.ones((pars.nlay, pars.nrow, pars.ncol))
+    sconc = 35.0*np.ones((pars.nlay, pars.nrow, pars.ncol))
 
     # define basic transport package
     btn = flopy.mt3d.Mt3dBtn(
             swt,
-            nprs=-1,
+            nprs=-pars.frequency,
             prsity=pars.n,
             sconc=sconc,
             chkmas=False,
@@ -344,13 +274,13 @@ def run_model(swt):
     if not success:
         raise Exception("SEAWAT did not terminate normally.")
 
-def extract_results(pars, only_final=True):
+
+def extract_results(name):
     """
         Open model results from binary files
 
         Inputs:
-            swt: model object
-            only_final: flag to only save the final timestep
+            name: name of model/realization/scenario
         Outputs:
             head: head matrix [nstp, nlay, nrow, ncol]
             qx: longitudinal flux matrix [nstp, nlay, nrow, ncol]
@@ -358,28 +288,75 @@ def extract_results(pars, only_final=True):
             qz: vertical flux matrix matrix [nstp, nlay, nrow, ncol]
             concentration: concentration matrix [nstp, nlay, nrow, ncol]
     """
+    pars = load_parameters(name)
     name = pars.name
     model_ws = f".\\model_files\\{name}"
-
-    if only_final:
-        nstp = 1
-    else:
-        nstp = int(pars.perlen/pars.dt)
-
-    head = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
-    qx = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
-    qy = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
-    qz = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
-    concentration = np.zeros(pars.nstep, pars.nlay, pars.nrow, pars.ncol)
+    nstp = pars.perlen/pars.dt
 
     # open binary files
     ucnobj = bf.UcnFile(os.path.join(model_ws, "MT3D001.UCN"))
     cbbobj = bf.CellBudgetFile(os.path.join(model_ws, f'{name}.cbc'))
     headobj = bf.HeadFile(os.path.join(model_ws, f'{name}.hds'))
 
+    # get head and concentration data
+    concentration = ucnobj.get_alldata()[:]
+    head = headobj.get_alldata()[:]
+    
+    # select every n items
+    times = ucnobj.get_times()
+    concentration = concentration
 
-pars = ModelParameters("test")
-swt = build_steady_model(pars)
-run_model(swt)
+    qx = np.zeros_like(concentration)
+    qy = np.zeros_like(concentration)
+    qz = np.zeros_like(concentration)
+
+    # get fluxes
+    for t in range(qx.shape[0]):
+        qx[t] = cbbobj.get_data(text="flow right face", totim=times[t])[0]
+        if pars.nrow > 1:
+            qy[t] = cbbobj.get_data(text="flow front face", totim=times[t])[0]
+        qz[t] = cbbobj.get_data(text="flow lower face", totim=times[t])[0]
+
+    save_results(name, concentration, head, qx, qy, qz)
+    return concentration, head, qx, qy, qz
 
 
+def save_results(name, concentration, head, qx, qy, qz):
+    """
+        Save extracted results to a .npy file
+
+        Inputs:
+            name: model name
+            concentration, head etc. : numpy arrays of model outputs
+        Outputs:
+            None
+    """
+    ws = os.path.join(f'.\\results\\{name}')
+    if not os.path.exists(ws):
+        os.mkdir(ws)
+
+    with open(os.path.join(ws, f"qx.npy"), 'wb') as f: np.save(f, np.array(qx))
+    with open(os.path.join(ws, f"qy.npy"), 'wb') as f: np.save(f, np.array(qy))
+    with open(os.path.join(ws, f"qz.npy"), 'wb') as f: np.save(f, np.array(qz))
+    with open(os.path.join(ws, f"head.npy"), 'wb') as f: np.save(f, np.array(head))
+    with open(os.path.join(ws, f"concentration.npy"), 'wb') as f: np.save(f, np.array(concentration))
+
+
+def load_results(name):
+    """
+        Load extracted results from .npy files
+
+        Inputs:
+            name: name of the model
+        Outputs:
+            concentration, head... : numpy matrices of results
+    """
+    ws = os.path.join(f'.\\results\\{name}')
+
+    with open(os.path.join(ws, f"qx.npy"), 'rb') as f: qx = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qy.npy"), 'rb') as f: qy = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"qz.npy"), 'rb') as f: qz = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"head.npy"), 'rb') as f: head = np.load(f, allow_pickle=True)
+    with open(os.path.join(ws, f"concentration.npy"), 'rb') as f: concentration = np.load(f, allow_pickle=True)
+
+    return concentration, head, qx, qy, qz, 
