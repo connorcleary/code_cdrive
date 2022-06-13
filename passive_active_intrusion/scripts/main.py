@@ -13,12 +13,12 @@ def create_run_plot_model(name, **kwargs):
             None
     """
 
-    pars = ModelParameters(name, **kwargs)
-    swt = cam.build_steady_model(pars)
-    cam.run_model(swt)
-    concentration, head, qx, qy, qz = cam.extract_results(name)
-    results.plot_results(name)
-    results.save_metrics(name, fraction=0.01)
+    #pars = ModelParameters(name, **kwargs)
+    #swt = cam.build_steady_model(pars)
+    #cam.run_model(swt)
+    #concentration, head, qx, qy, qz = cam.extract_results(name)
+    #results.plot_results(name)
+    #results.save_metrics(name, fraction=0.01)
     results.plot_boundary_concentration(name)
 
 def main():

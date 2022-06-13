@@ -176,9 +176,9 @@ def plot_boundary_concentration(name, return_axs=False, figsize=(6,6), row = 0):
     y=np.linspace(-pars.sea_level, pars.h_b, int(pars.nlay*((pars.sea_level+pars.h_b)/pars.Lz)))
 
     # find isoclors at the mound column
-    lay_isoclor1 = np.atleast_1d(np.argmax(concentration_mound>0.035))[0]
-    lay_isoclor5 = np.atleast_1d(np.argmax(concentration_mound>0.175))[0]
-    lay_isoclor10 = np.atleast_1d(np.argmax(concentration_mound>0.35))[0]
+    lay_isoclor1 = np.atleast_1d(np.argmax(concentration_mound>0.35))[0]
+    lay_isoclor5 = np.atleast_1d(np.argmax(concentration_mound>1.75))[0]
+    lay_isoclor10 = np.atleast_1d(np.argmax(concentration_mound>3.5))[0]
 
     f, ax = plt.subplots(figsize=figsize)
     ax.plot(np.flipud(concentration_edge), y)
